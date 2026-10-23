@@ -1,0 +1,18 @@
+<view class="page">
+  <view class="card">
+    <view class="field">
+      <view class="field-label">提现金额（元）</view>
+      <input class="input" type="digit" placeholder="请输入金额" value="{{amount}}" bindinput="onAmountInput" />
+    </view>
+    <view class="field" style="margin-bottom:0">
+      <view class="field-label">到账银行卡ID（dev 手填，仅限本人名下卡片）</view>
+      <input class="input" type="number" placeholder="如 1" value="{{bankCardId}}" bindinput="onCardInput" />
+    </view>
+  </view>
+
+  <view class="card muted" style="line-height:1.8">
+    提现申请提交后由管理端审核打款；有最低提现金额限制，被驳回会原路退回余额。
+  </view>
+
+  <view class="btn btn-primary btn-bottom {{submitting ? 'btn-disabled' : ''}}" bindtap="submit">提交申请</view>
+</view>

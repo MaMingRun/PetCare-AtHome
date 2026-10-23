@@ -1,0 +1,10 @@
+.nav-btn {
+  flex: 1;
+  background: #fff;
+  border-radius: 12rpx;
+  text-align: center;
+  padding: 24rpx 0;
+  margin-right: 20rpx;
+  font-size: 28rpx;
+}
+.nav-btn:last-child { margin-right: 0; }

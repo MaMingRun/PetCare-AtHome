@@ -1,0 +1,29 @@
+<view class="page">
+  <!-- 余额卡 -->
+  <view class="wallet-card" wx:if="{{wallet}}">
+    <view class="muted" style="color:rgba(255,255,255,.8)">可提现余额（元）</view>
+    <view class="wallet-balance">{{wallet.balanceYuan}}</view>
+    <view class="row" style="margin-top:30rpx">
+      <view class="col" style="flex:1">
+        <view class="muted" style="color:rgba(255,255,255,.8)">待结算</view>
+        <view style="color:#fff;font-size:32rpx;margin-top:6rpx">{{wallet.pendingYuan}}</view>
+      </view>
+      <view class="col" style="flex:1">
+        <view class="muted" style="color:rgba(255,255,255,.8)">累计收入</view>
+        <view style="color:#fff;font-size:32rpx;margin-top:6rpx">{{wallet.totalYuan}}</view>
+      </view>
+      <view class="btn withdraw-btn" bindtap="goWithdraw">提现</view>
+    </view>
+  </view>
+
+  <!-- 流水 -->
+  <view class="title" style="margin:10rpx 0 20rpx">收支明细</view>
+  <view wx:if="{{flows.length === 0}}" class="empty">暂无流水</view>
+  <view wx:for="{{flows}}" wx:key="id" class="card row between" style="padding:24rpx 28rpx">
+    <view class="col">
+      <view>{{item.bizTypeText}}</view>
+      <view class="muted" style="margin-top:6rpx">{{item.createdAtText}}<text wx:if="{{item.remark}}"> · {{item.remark}}</text></view>
+    </view>
+    <view class="{{item.amount >= 0 ? 'price' : ''}}" style="font-size:30rpx">{{item.amountYuan}}</view>
+  </view>
+</view>

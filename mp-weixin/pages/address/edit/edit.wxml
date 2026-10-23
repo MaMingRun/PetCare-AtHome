@@ -1,0 +1,46 @@
+<view class="page" style="padding-bottom: 180rpx">
+  <view class="card">
+    <view class="field">
+      <view class="field-label">联系人 *</view>
+      <input class="input" placeholder="姓名" value="{{form.contactName}}" data-key="contactName" bindinput="onInput" />
+    </view>
+    <view class="field">
+      <view class="field-label">手机号 *</view>
+      <input class="input" type="number" placeholder="11 位手机号" value="{{form.contactPhone}}" data-key="contactPhone" bindinput="onInput" />
+    </view>
+  </view>
+
+  <view class="card">
+    <view class="field">
+      <view class="field-label">城市 *</view>
+      <input class="input" placeholder="如 广州市" value="{{form.city}}" data-key="city" bindinput="onInput" />
+    </view>
+    <view class="field">
+      <view class="field-label">区/县 *</view>
+      <input class="input" placeholder="如 天河区" value="{{form.district}}" data-key="district" bindinput="onInput" />
+    </view>
+    <view class="field">
+      <view class="field-label">小区</view>
+      <input class="input" placeholder="如 天河北苑" value="{{form.community}}" data-key="community" bindinput="onInput" />
+    </view>
+    <view class="field">
+      <view class="field-label">详细门牌号</view>
+      <input class="input" placeholder="如 3 栋 2 单元 1801" value="{{form.detail}}" data-key="detail" bindinput="onInput" />
+    </view>
+  </view>
+
+  <view class="card">
+    <view class="field">
+      <view class="field-label">入户方式</view>
+      <picker range="{{entryList}}" value="{{entryIndex}}" bindchange="onEntry">
+        <view class="picker-value">{{entryList[entryIndex]}} ›</view>
+      </picker>
+    </view>
+    <view class="field row between" style="align-items:center;margin-bottom:0">
+      <view class="field-label" style="margin-bottom:0">设为默认地址</view>
+      <switch checked="{{isDefault}}" color="#ff8c42" bindchange="onDefault" />
+    </view>
+  </view>
+
+  <view class="btn btn-primary btn-bottom" bindtap="submit">{{isEdit ? '保存修改' : '添加地址'}}</view>
+</view>

@@ -1,0 +1,18 @@
+.svc-cover {
+  width: 140rpx; height: 140rpx;
+  border-radius: 16rpx;
+  background: var(--brand-light);
+  color: var(--brand);
+  font-size: 56rpx;
+  font-weight: 600;
+  display: flex; align-items: center; justify-content: center;
+  margin-right: 24rpx;
+  flex-shrink: 0;
+}
+.dot {
+  width: 12rpx; height: 12rpx;
+  border-radius: 50%;
+  background: var(--brand);
+  margin-right: 16rpx;
+  flex-shrink: 0;
+}

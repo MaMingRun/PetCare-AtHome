@@ -1,0 +1,29 @@
+<view class="page">
+  <!-- 顶部导航 -->
+  <view class="row" style="margin-bottom:20rpx">
+    <view class="nav-btn" bindtap="goMine">我的订单</view>
+    <view class="nav-btn" bindtap="goWallet">钱包</view>
+  </view>
+
+  <view class="title" style="margin:8rpx 0 20rpx">接单池（{{dispatches.length}}）</view>
+
+  <view wx:if="{{dispatches.length === 0 && !loading}}" class="empty">暂无待响应派单</view>
+
+  <view wx:for="{{dispatches}}" wx:key="dispatchId" class="card">
+    <view class="row between" style="margin-bottom:10rpx">
+      <view class="title">{{item.serviceName}}</view>
+      <view class="price">{{item.payYuan}}</view>
+    </view>
+    <view class="muted" style="margin-bottom:6rpx">{{item.startDate}} 起 · 共{{item.days}}天 · {{item.timeSlot}}</view>
+    <view class="muted" style="margin-bottom:6rpx">{{item.address}}</view>
+    <view class="row" style="margin:6rpx 0">
+      <view class="tag tag-blue">{{item.entryModeText}}</view>
+      <view class="tag tag-red" wx:if="{{item.deadlineText}}">{{item.deadlineText}} 前响应</view>
+    </view>
+    <view class="muted" style="margin-bottom:16rpx" wx:if="{{item.remark}}">备注：{{item.remark}}</view>
+    <view class="row">
+      <view class="btn btn-plain btn-sm" style="flex:1;margin-right:20rpx" data-id="{{item.orderId}}" bindtap="reject">拒单</view>
+      <view class="btn btn-primary btn-sm" style="flex:1" data-id="{{item.orderId}}" bindtap="accept">接单</view>
+    </view>
+  </view>
+</view>

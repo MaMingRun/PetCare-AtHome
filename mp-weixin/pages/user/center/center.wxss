@@ -1,0 +1,20 @@
+.user-card { display: flex; align-items: center; }
+.avatar {
+  width: 110rpx; height: 110rpx;
+  border-radius: 50%;
+  background: var(--brand-light);
+  color: var(--brand);
+  font-size: 44rpx;
+  font-weight: 600;
+  display: flex; align-items: center; justify-content: center;
+  margin-right: 24rpx;
+  flex-shrink: 0;
+}
+.menu-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 24rpx 0;
+  border-bottom: 2rpx solid var(--line);
+}
+.menu-item:last-child { border-bottom: none; }

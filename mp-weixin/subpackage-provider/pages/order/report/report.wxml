@@ -1,0 +1,45 @@
+<view class="page" style="padding-bottom: 200rpx">
+  <view class="card">
+    <view class="field">
+      <view class="field-label">进食情况</view>
+      <view class="row" style="flex-wrap:wrap">
+        <view wx:for="{{eatingOptions}}" wx:key="*this"
+          class="opt {{form.eating === item ? 'opt-active' : ''}}"
+          data-key="eating" data-v="{{item}}" bindtap="pick">{{item}}</view>
+      </view>
+    </view>
+    <view class="field">
+      <view class="field-label">饮水情况</view>
+      <view class="row" style="flex-wrap:wrap">
+        <view wx:for="{{drinkingOptions}}" wx:key="*this"
+          class="opt {{form.drinking === item ? 'opt-active' : ''}}"
+          data-key="drinking" data-v="{{item}}" bindtap="pick">{{item}}</view>
+      </view>
+    </view>
+    <view class="field">
+      <view class="field-label">排泄情况</view>
+      <view class="row" style="flex-wrap:wrap">
+        <view wx:for="{{excretionOptions}}" wx:key="*this"
+          class="opt {{form.excretion === item ? 'opt-active' : ''}}"
+          data-key="excretion" data-v="{{item}}" bindtap="pick">{{item}}</view>
+      </view>
+    </view>
+    <view class="field" style="margin-bottom:0">
+      <view class="field-label">精神状态</view>
+      <view class="row" style="flex-wrap:wrap">
+        <view wx:for="{{spiritOptions}}" wx:key="*this"
+          class="opt {{form.spirit === item ? 'opt-active' : ''}}"
+          data-key="spirit" data-v="{{item}}" bindtap="pick">{{item}}</view>
+      </view>
+    </view>
+  </view>
+
+  <view class="card">
+    <view class="field" style="margin-bottom:0">
+      <view class="field-label">服务总结（必填）</view>
+      <textarea class="textarea" placeholder="今天服务了什么、宠物状态如何、需要主人注意什么" value="{{summary}}" bindinput="onSummaryInput" />
+    </view>
+  </view>
+
+  <view class="btn btn-primary btn-bottom {{submitting ? 'btn-disabled' : ''}}" bindtap="submit">提交报告</view>
+</view>

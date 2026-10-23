@@ -1,0 +1,12 @@
+.svc { display: flex; }
+.svc-cover {
+  width: 120rpx; height: 120rpx;
+  border-radius: 16rpx;
+  background: var(--brand-light);
+  color: var(--brand);
+  font-size: 48rpx;
+  font-weight: 600;
+  display: flex; align-items: center; justify-content: center;
+  margin-right: 24rpx;
+  flex-shrink: 0;
+}

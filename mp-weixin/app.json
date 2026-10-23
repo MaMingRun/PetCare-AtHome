@@ -1,0 +1,54 @@
+{
+  "pages": [
+    "pages/index/index",
+    "pages/service/list/list",
+    "pages/service/detail/detail",
+    "pages/order/create/create",
+    "pages/order/list/list",
+    "pages/order/detail/detail",
+    "pages/order/review/review",
+    "pages/address/list/list",
+    "pages/address/edit/edit",
+    "pages/pet/list/list",
+    "pages/pet/edit/edit",
+    "pages/user/center/center"
+  ],
+  "subpackages": [
+    {
+      "root": "subpackage-provider",
+      "name": "provider",
+      "pages": [
+        "pages/login/login",
+        "pages/dispatch/pool/pool",
+        "pages/order/list/list",
+        "pages/order/detail/detail",
+        "pages/order/credential/credential",
+        "pages/order/report/report",
+        "pages/wallet/index/index",
+        "pages/wallet/withdraw/withdraw"
+      ]
+    }
+  ],
+  "window": {
+    "navigationBarBackgroundColor": "#ffffff",
+    "navigationBarTextStyle": "black",
+    "navigationBarTitleText": "宠物到家",
+    "backgroundColor": "#f6f7f9"
+  },
+  "tabBar": {
+    "color": "#9aa0a6",
+    "selectedColor": "#ff8c42",
+    "backgroundColor": "#ffffff",
+    "list": [
+      { "pagePath": "pages/index/index", "text": "首页" },
+      { "pagePath": "pages/order/list/list", "text": "订单" },
+      { "pagePath": "pages/user/center/center", "text": "我的" }
+    ]
+  },
+  "sitemapLocation": "sitemap.json",
+  "permission": {
+    "scope.userLocation": {
+      "desc": "用于服务师到达打卡时上传定位"
+    }
+  }
+}

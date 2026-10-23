@@ -1,0 +1,21 @@
+<view class="page" style="padding-bottom: 200rpx">
+  <view wx:if="{{pets.length === 0}}" class="empty">暂无宠物档案，添加一个吧～</view>
+  <view wx:for="{{pets}}" wx:key="id" class="card" data-id="{{item.id}}" bindtap="edit">
+    <view class="row between" style="margin-bottom:10rpx">
+      <view class="title">{{item.name}}</view>
+      <view class="tag">{{item.speciesText}}</view>
+    </view>
+    <view class="muted" style="margin-bottom:10rpx">
+      {{item.breed || '未知品种'}}<text wx:if="{{item.weightKg}}"> · {{item.weightKg}}kg</text><text wx:if="{{item.sterilized === 1}}"> · 已绝育</text>
+    </view>
+    <view wx:if="{{item.tagList.length > 0}}">
+      <text wx:for="{{item.tagList}}" wx:key="*this" class="tag tag-green">{{item}}</text>
+    </view>
+    <view class="muted" style="margin-top:10rpx" wx:if="{{item.allergies}}">过敏/禁忌：{{item.allergies}}</view>
+    <view class="row" style="margin-top:20rpx;justify-content:flex-end">
+      <view class="btn btn-grey btn-sm" data-id="{{item.id}}" data-name="{{item.name}}" catchtap="del">删除</view>
+    </view>
+  </view>
+
+  <view class="btn btn-primary btn-bottom" bindtap="add">+ 添加宠物</view>
+</view>

@@ -1,0 +1,67 @@
+<view class="page" wx:if="{{order}}" style="padding-bottom: 240rpx">
+
+  <view class="status-banner status-{{order.status}}">{{order.statusText}}</view>
+
+  <!-- 服务信息 -->
+  <view class="card">
+    <view class="row between" style="margin-bottom:12rpx">
+      <view class="title">{{order.serviceName}}</view>
+      <view class="price">{{order.payAmountYuan}}</view>
+    </view>
+    <view class="muted">订单号：{{order.orderNo}}</view>
+    <view class="muted" style="margin-top:6rpx">{{order.startDate}} 起 · 共{{order.days}}天 · {{order.timeSlot}}</view>
+  </view>
+
+  <!-- 排期 -->
+  <view class="card">
+    <view class="title" style="margin-bottom:16rpx">服务排期</view>
+    <view wx:for="{{order.dayViewList}}" wx:key="id" class="row between" style="margin-bottom:12rpx">
+      <view>{{item.date}} {{item.slotBegin}}-{{item.slotEnd}}</view>
+      <view class="tag {{item.status === 'DONE' ? 'tag-green' : (item.status === 'SERVING' ? 'tag-blue' : 'tag-grey')}}">{{item.dayStatusText}}</view>
+    </view>
+  </view>
+
+  <!-- 地址与宠物 -->
+  <view class="card">
+    <view class="title" style="margin-bottom:16rpx">上门信息</view>
+    <view class="row" style="margin-bottom:12rpx">
+      <view class="muted" style="width:140rpx">联系人</view>
+      <view>{{order.contactName}} {{order.contactPhone}}</view>
+    </view>
+    <view class="row" style="margin-bottom:12rpx">
+      <view class="muted" style="width:140rpx">地址</view>
+      <view style="flex:1">{{order.addressText}}</view>
+    </view>
+    <view class="row" style="margin-bottom:12rpx">
+      <view class="muted" style="width:140rpx">入户方式</view>
+      <view>{{order.entryModeText}}</view>
+    </view>
+    <view class="row" style="margin-bottom:12rpx" wx:if="{{order.petText}}">
+      <view class="muted" style="width:140rpx">宠物</view>
+      <view>{{order.petText}}</view>
+    </view>
+    <view class="row" wx:if="{{order.remark}}">
+      <view class="muted" style="width:140rpx">用户备注</view>
+      <view style="flex:1">{{order.remark}}</view>
+    </view>
+  </view>
+
+  <!-- 辅助入口 -->
+  <view class="card" wx:if="{{order.status === 'ARRIVED' || order.status === 'SERVING'}}">
+    <view class="row">
+      <view class="btn btn-plain btn-sm" style="flex:1;margin-right:20rpx" bindtap="goCredential">入户凭证</view>
+      <view class="btn btn-plain btn-sm" style="flex:1" bindtap="goReport">服务报告</view>
+    </view>
+  </view>
+
+  <!-- 履约操作区 -->
+  <view class="col btn-bar">
+    <view wx:if="{{order.status === 'ACCEPTED'}}" class="btn btn-primary" bindtap="act" data-action="depart">出发上门</view>
+    <view wx:if="{{order.status === 'DEPARTED'}}" class="btn btn-primary" bindtap="act" data-action="arrive">到达打卡（需定位）</view>
+    <view wx:if="{{order.status === 'ARRIVED'}}" class="btn btn-primary" bindtap="act" data-action="start">开始服务</view>
+    <block wx:if="{{order.status === 'SERVING'}}">
+      <view class="btn btn-grey" style="margin-bottom:20rpx" bindtap="addNote">写服务留痕</view>
+      <view class="btn btn-primary" bindtap="act" data-action="finish-day">完成当天服务</view>
+    </block>
+  </view>
+</view>

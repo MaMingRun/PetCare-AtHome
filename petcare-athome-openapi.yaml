@@ -1,0 +1,3097 @@
+openapi: 3.0.3
+info:
+  title: 宠爱到家（PetCare AtHome）接口文档
+  version: 1.1.0
+  description: |
+    MVP（P0）接口定义，覆盖 **用户端小程序 / 服务师端小程序 / 管理后台** 三端。本版已收敛至 MVP 范围：
+    V1.1/V2.0 功能（会员、次卡、优惠券、积分、保险投保、数据看板等）不在此文档内，见「MVP 明确不做」。
+
+    ## 核心链路（建议按此顺序实现与复习）
+    1. **下单**：`GET /user/services`、`POST /user/services/price-calc` → `POST /user/orders`
+    2. **支付**：`POST /user/orders/{id}/pay` + 回调 `POST /callback/wechat/pay`
+    3. **派单**：`POST /admin/orders/{id}/dispatch` → `POST /provider/orders/{id}/accept`
+    4. **打卡**：`POST /provider/orders/{id}/checkin`（定位偏差校验）
+    5. **留痕**：`GET /provider/orders/{id}/sop` + `POST /provider/orders/{id}/records`
+    6. **报告**：`POST /provider/orders/{id}/report` → `GET /user/orders/{id}/report`
+    7. **确认**：`POST /user/orders/{id}/confirm`（72h 超时自动确认）
+    8. **结算**：`GET /provider/wallet/settlements`（T+1）→ `POST /provider/withdrawals`
+    9. **评价**：`POST /user/orders/{id}/review`（窗口 72h，超时未评自动归档）
+
+    链路之外的配套能力（可后置）：入驻认证、地址与入户凭证、收藏/指定服务师、排班、申诉工单、退款与提现审核、财务对账、订单告警、权限与审计、文件直传与字典。
+
+    ## 通用约定
+    - **响应体**：所有接口统一返回 `Result`：`{ "code": 1, "msg": null, "data": ... }`，`code=1` 成功、`code=0` 失败（`msg` 为错误信息）。
+    - **分页**：请求参数 `page`（页码，从 1 开始）、`pageSize`（每页条数，默认 10）；响应 `data` 为 `PageResult`：`{ "total": 100, "records": [...] }`。
+    - **鉴权**：三端均使用 JWT，放在 `Authorization: Bearer <token>` 请求头。登录接口无需鉴权。
+    - **金额**：一律使用 **分**（integer），如 6800 表示 68.00 元。
+    - **时间**：`yyyy-MM-dd HH:mm:ss`；日期 `yyyy-MM-dd`。
+    - **图片/视频**：小程序端先调 `POST /common/files/presign` 获取 OSS 直传凭证，上传成功后把可访问 URL 提交给业务接口；服务影像需带水印（时间 + 定位），由客户端合成。
+    - **幂等**：`POST /user/orders`、`POST /user/orders/{id}/pay`、`POST /provider/withdrawals` 需带 `Idempotency-Key` 请求头防重复提交。
+    - **视频时长**：≤ 60s。
+
+    ## 本地开发（无企业资质）
+    小程序端用**测试号** + 开发者工具「不校验合法域名」直连本地后端 `http://127.0.0.1:8080`。微信支付、手机号快捷绑定、人脸核身、虚拟号、OSS 直传在 dev 环境由 **Mock 网关**替代（接口形状不变，详见 PRD §11）：
+    支付模拟成功并驱动状态流转（前端跳过 `wx.requestPayment`）、手机号手动输入、核身自动通过、虚拟号返回测试号码、文件存本地。
+    `/callback/wechat/pay` 保留，可用 curl 重放回调报文测试验签与幂等。
+
+    ## MVP 明确不做
+    会员体系、次卡/套餐、积分、优惠券、定金/尾款模式、电子发票、服务报告分享、服务师回评与评价激励、实时视频通话、虚拟号 IM、保险自动投保、数据看板、内容运营配置、多城市。
+servers:
+  - url: http://localhost:8080
+    description: 本地开发
+  - url: https://api.petcare-athome.com
+    description: 生产环境
+tags:
+  - {name: 通用, description: 文件上传、字典等公共能力}
+  - {name: 用户端-认证与账户}
+  - {name: 用户端-地址与入户方式}
+  - {name: 用户端-宠物档案}
+  - {name: 用户端-服务与预约}
+  - {name: 用户端-服务师}
+  - {name: 用户端-订单与支付}
+  - {name: 用户端-服务过程}
+  - {name: 用户端-评价}
+  - {name: 用户端-申诉与消息}
+  - {name: 用户端-个人中心}
+  - {name: 服务师端-入驻与认证}
+  - {name: 服务师端-工作台与接单}
+  - {name: 服务师端-服务执行}
+  - {name: 服务师端-收入与提现}
+  - {name: 管理后台-认证与权限}
+  - {name: 管理后台-订单调度}
+  - {name: 管理后台-服务师管理}
+  - {name: 管理后台-用户与宠物}
+  - {name: 管理后台-财务}
+  - {name: 管理后台-客诉工单}
+  - {name: 管理后台-审计日志}
+  - {name: 回调, description: 第三方服务端回调，非小程序调用}
+security:
+  - bearerAuth: []
+
+paths:
+  # ============================ 通用 ============================
+  /common/files/presign:
+    post:
+      tags: [通用]
+      operationId: commonFilePresign
+      summary: 获取 OSS 直传凭证
+      description: 返回 OSS 直传所需的临时签名凭证，客户端据此直传文件，避免经过业务服务端。
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [bizType, fileName]
+              properties:
+                bizType: {$ref: '#/components/schemas/FileBizType'}
+                fileName: {type: string, example: "IMG_0001.jpg"}
+                contentType: {type: string, example: "image/jpeg"}
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Result'
+                  - {type: object, properties: {data: {$ref: '#/components/schemas/PresignVO'}}}
+
+  /common/dicts/{type}:
+    get:
+      tags: [通用]
+      operationId: commonDictGet
+      summary: 获取字典项
+      description: 用于性格标签、取消原因、异常类型等下拉/多选数据。
+      parameters:
+        - {name: type, in: path, required: true, schema: {type: string, enum: [pet_personality, cancel_reason, exception_type, refund_reason]}}
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Result'
+                  - {type: object, properties: {data: {type: array, items: {$ref: '#/components/schemas/DictItem'}}}}
+
+  # ============================ 用户端：认证与账户 ============================
+  /user/auth/login:
+    post:
+      tags: [用户端-认证与账户]
+      operationId: userLogin
+      summary: 微信授权登录
+      description: wx.login 的 code 换 openid；首次登录自动注册；传入 phoneCode 时同时完成手机号绑定。
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [code]
+              properties:
+                code: {type: string, description: wx.login 返回的 code}
+                phoneCode: {type: string, description: 手机号快捷绑定 code（可选）}
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Result'
+                  - {type: object, properties: {data: {$ref: '#/components/schemas/LoginVO'}}}
+
+  /user/auth/bind-phone:
+    post:
+      tags: [用户端-认证与账户]
+      operationId: userBindPhone
+      summary: 绑定手机号
+      description: 登录时未携带 phoneCode 的用户后续补绑；需微信手机号授权 code。
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [phoneCode]
+              properties:
+                phoneCode: {type: string, description: 手机号快捷绑定 code}
+      responses:
+        '200': {$ref: '#/components/responses/OkVoid'}
+
+  /user/profile:
+    get:
+      tags: [用户端-认证与账户]
+      operationId: userProfileGet
+      summary: 获取我的资料
+      responses:
+        '200': {description: OK, content: {application/json: {schema: {allOf: [{$ref: '#/components/schemas/Result'}, {type: object, properties: {data: {$ref: '#/components/schemas/UserProfileVO'}}}]}}}}
+    put:
+      tags: [用户端-认证与账户]
+      operationId: userProfileUpdate
+      summary: 更新我的资料
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                nickname: {type: string}
+                avatar: {type: string, description: OSS URL}
+      responses:
+        '200': {$ref: '#/components/responses/OkVoid'}
+
+  # ============================ 用户端：地址与入户方式 ============================
+  /user/addresses:
+    get:
+      tags: [用户端-地址与入户方式]
+      operationId: userAddressList
+      summary: 地址簿列表
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Result'
+                  - {type: object, properties: {data: {type: array, items: {$ref: '#/components/schemas/AddressVO'}}}}
+    post:
+      tags: [用户端-地址与入户方式]
+      operationId: userAddressCreate
+      summary: 新增地址
+      description: 入户方式中的密码/钥匙类信息加密存储，仅服务时段对当单服务师可见。
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/AddressSaveDTO'}
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Result'
+                  - {type: object, properties: {data: {type: integer, format: int64, description: 新地址 id}}}
+
+  /user/addresses/{id}:
+    put:
+      tags: [用户端-地址与入户方式]
+      operationId: userAddressUpdate
+      summary: 修改地址
+      parameters: [{$ref: '#/components/parameters/PathId'}]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/AddressSaveDTO'}
+      responses:
+        '200': {$ref: '#/components/responses/OkVoid'}
+    delete:
+      tags: [用户端-地址与入户方式]
+      operationId: userAddressDelete
+      summary: 删除地址
+      parameters: [{$ref: '#/components/parameters/PathId'}]
+      responses:
+        '200': {$ref: '#/components/responses/OkVoid'}
+
+  # ============================ 用户端：宠物档案 ============================
+  /user/pets:
+    get:
+      tags: [用户端-宠物档案]
+      operationId: userPetList
+      summary: 宠物列表
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Result'
+                  - {type: object, properties: {data: {type: array, items: {$ref: '#/components/schemas/PetVO'}}}}
+    post:
+      tags: [用户端-宠物档案]
+      operationId: userPetCreate
+      summary: 新增宠物档案
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/PetSaveDTO'}
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Result'
+                  - {type: object, properties: {data: {type: integer, format: int64}}}
+
+  /user/pets/{id}:
+    get:
+      tags: [用户端-宠物档案]
+      operationId: userPetGet
+      summary: 宠物档案详情
+      parameters: [{$ref: '#/components/parameters/PathId'}]
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Result'
+                  - {type: object, properties: {data: {$ref: '#/components/schemas/PetVO'}}}
+    put:
+      tags: [用户端-宠物档案]
+      operationId: userPetUpdate
+      summary: 修改宠物档案
+      parameters: [{$ref: '#/components/parameters/PathId'}]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/PetSaveDTO'}
+      responses:
+        '200': {$ref: '#/components/responses/OkVoid'}
+    delete:
+      tags: [用户端-宠物档案]
+      operationId: userPetDelete
+      summary: 删除宠物档案
+      parameters: [{$ref: '#/components/parameters/PathId'}]
+      responses:
+        '200': {$ref: '#/components/responses/OkVoid'}
+
+  /user/pets/{id}/vaccinations:
+    post:
+      tags: [用户端-宠物档案]
+      operationId: userPetVaccinationCreate
+      summary: 新增疫苗记录
+      description: 疫苗记录与疫苗本照片；上传后自动进入宠物健康信息。
+      parameters: [{$ref: '#/components/parameters/PathId'}]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/VaccinationDTO'}
+      responses:
+        '200': {$ref: '#/components/responses/OkVoid'}
+
+# ============================ 用户端：服务与预约 ============================
+  /user/services:
+    get:
+      tags: [用户端-服务与预约]
+      operationId: userServiceList
+      summary: 服务类目列表
+      description: MVP 上线三类：上门喂养、上门洗护、上门医护。
+      parameters:
+        - {name: category, in: query, schema: {type: string, enum: [FEEDING, GROOMING, MEDICAL]}}
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Result'
+                  - {type: object, properties: {data: {type: array, items: {$ref: '#/components/schemas/ServiceVO'}}}}
+
+  /user/services/{id}:
+    get:
+      tags: [用户端-服务与预约]
+      operationId: userServiceGet
+      summary: 服务详情
+      parameters: [{$ref: '#/components/parameters/PathId'}]
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Result'
+                  - {type: object, properties: {data: {$ref: '#/components/schemas/ServiceDetailVO'}}}
+
+  /user/services/price-calc:
+    post:
+      tags: [用户端-服务与预约]
+      operationId: userServicePriceCalc
+      summary: 价格试算
+      description: 选宠物 → 实时试算（按宠物数量/体重加价）。
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/PriceCalcDTO'}
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Result'
+                  - {type: object, properties: {data: {$ref: '#/components/schemas/PriceCalcVO'}}}
+
+  /user/services/{id}/availability:
+    get:
+      tags: [用户端-服务与预约]
+      operationId: userServiceAvailability
+      summary: 查询可用时间窗
+      description: 展示服务师可用性；喂养类支持多日连续预约。
+      parameters:
+        - {$ref: '#/components/parameters/PathId'}
+        - {name: date, in: query, required: true, schema: {type: string, format: date}}
+        - {name: providerId, in: query, schema: {type: integer, format: int64, description: 指定服务师时传入}}
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Result'
+                  - {type: object, properties: {data: {type: array, items: {$ref: '#/components/schemas/TimeSlotVO'}}}}
+
+  # ============================ 用户端：服务师 ============================
+  /user/providers:
+    get:
+      tags: [用户端-服务师]
+      operationId: userProviderList
+      summary: 服务师列表
+      parameters:
+        - {name: serviceId, in: query, schema: {type: integer, format: int64}}
+        - {name: sort, in: query, schema: {type: string, enum: [distance, score], default: score}}
+        - {name: longitude, in: query, schema: {type: number, format: double, description: sort=distance 时必传，用户当前定位}}
+        - {name: latitude, in: query, schema: {type: number, format: double, description: sort=distance 时必传}}
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Result'
+                  - {type: object, properties: {data: {type: array, items: {$ref: '#/components/schemas/ProviderBriefVO'}}}}
+
+  /user/providers/favorites:
+    get:
+      tags: [用户端-服务师]
+      operationId: userProviderFavorites
+      summary: 我的专属服务师（收藏）
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Result'
+                  - {type: object, properties: {data: {type: array, items: {$ref: '#/components/schemas/ProviderBriefVO'}}}}
+
+  /user/providers/{id}:
+    get:
+      tags: [用户端-服务师]
+      operationId: userProviderGet
+      summary: 服务师主页
+      description: 真实姓名脱敏展示；含认证徽章、专长标签、服务次数、评分、历史服务相册。
+      parameters: [{$ref: '#/components/parameters/PathId'}]
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Result'
+                  - {type: object, properties: {data: {$ref: '#/components/schemas/ProviderDetailVO'}}}
+
+  /user/providers/{id}/reviews:
+    get:
+      tags: [用户端-服务师]
+      operationId: userProviderReviews
+      summary: 服务师评价列表
+      description: 只展示真实完单评价，支持带图。
+      parameters:
+        - {$ref: '#/components/parameters/PathId'}
+        - {$ref: '#/components/parameters/Page'}
+        - {$ref: '#/components/parameters/PageSize'}
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Result'
+                  - {type: object, properties: {data: {allOf: [{$ref: '#/components/schemas/PageResult'}, {type: object, properties: {records: {type: array, items: {$ref: '#/components/schemas/ReviewVO'}}}}]}}}
+
+  /user/providers/{id}/favorite:
+    post:
+      tags: [用户端-服务师]
+      operationId: userProviderFavoriteAdd
+      summary: 收藏服务师（成为候选专属服务师）
+      parameters: [{$ref: '#/components/parameters/PathId'}]
+      responses:
+        '200': {$ref: '#/components/responses/OkVoid'}
+    delete:
+      tags: [用户端-服务师]
+      operationId: userProviderFavoriteRemove
+      summary: 取消收藏
+      parameters: [{$ref: '#/components/parameters/PathId'}]
+      responses:
+        '200': {$ref: '#/components/responses/OkVoid'}
+
+  # ============================ 用户端：订单与支付 ============================
+  /user/orders:
+    post:
+      tags: [用户端-订单与支付]
+      operationId: userOrderCreate
+      summary: 提交订单
+      description: |
+        生成订单并进入待支付（15 分钟支付倒计时）。
+        喂养类支持多日连续预约：`days` 传多次日期/时间窗，一次下单 N 天。
+        需带 `Idempotency-Key` 请求头。
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/OrderCreateDTO'}
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Result'
+                  - {type: object, properties: {data: {$ref: '#/components/schemas/OrderCreateVO'}}}
+    get:
+      tags: [用户端-订单与支付]
+      operationId: userOrderList
+      summary: 我的订单列表
+      parameters:
+        - {name: status, in: query, schema: {$ref: '#/components/schemas/OrderStatus'}}
+        - {$ref: '#/components/parameters/Page'}
+        - {$ref: '#/components/parameters/PageSize'}
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Result'
+                  - {type: object, properties: {data: {allOf: [{$ref: '#/components/schemas/PageResult'}, {type: object, properties: {records: {type: array, items: {$ref: '#/components/schemas/OrderVO'}}}}]}}}
+
+  /user/orders/{id}:
+    get:
+      tags: [用户端-订单与支付]
+      operationId: userOrderGet
+      summary: 订单详情
+      parameters: [{$ref: '#/components/parameters/PathId'}]
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Result'
+                  - {type: object, properties: {data: {$ref: '#/components/schemas/OrderDetailVO'}}}
+
+  /user/orders/{id}/pay:
+    post:
+      tags: [用户端-订单与支付]
+      operationId: userOrderPay
+      summary: 微信支付下单
+      description: 平台担保交易，完单后 T+1 结算给服务师。需带 `Idempotency-Key`。
+      parameters: [{$ref: '#/components/parameters/PathId'}]
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Result'
+                  - {type: object, properties: {data: {$ref: '#/components/schemas/WxPayParamsVO'}}}
+
+  /user/orders/{id}/cancel-preview:
+    get:
+      tags: [用户端-订单与支付]
+      operationId: userOrderCancelPreview
+      summary: 取消/退款试算（取消前预览）
+      description: 展示可退金额、违约金与规则文案；用户在取消确认弹窗确认后再调 POST /cancel。
+      parameters: [{$ref: '#/components/parameters/PathId'}]
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Result'
+                  - {type: object, properties: {data: {$ref: '#/components/schemas/CancelPreviewVO'}}}
+
+  /user/orders/{id}/cancel:
+    post:
+      tags: [用户端-订单与支付]
+      operationId: userOrderCancel
+      summary: 取消订单
+      description: 按退款规则执行：待支付/待接单免费全额退；已接单且距服务 >4h 免费；≤4h 收 30% 违约金（给服务师）。退款金额与 cancel-preview 试算一致。
+      parameters: [{$ref: '#/components/parameters/PathId'}]
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [reasonCode]
+              properties:
+                reasonCode: {type: string, description: 字典 cancel_reason}
+                remark: {type: string}
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Result'
+                  - {type: object, properties: {data: {$ref: '#/components/schemas/CancelPreviewVO'}, description: 退款金额与违约金试算}}
+
+  /user/orders/{id}/refund:
+    post:
+      tags: [用户端-订单与支付]
+      operationId: userOrderRefund
+      summary: 申请退款
+      parameters: [{$ref: '#/components/parameters/PathId'}]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [reasonCode]
+              properties:
+                reasonCode: {type: string, description: 字典 refund_reason}
+                remark: {type: string}
+      responses:
+        '200': {$ref: '#/components/responses/OkVoid'}
+
+  /user/orders/{id}/confirm:
+    post:
+      tags: [用户端-订单与支付]
+      operationId: userOrderConfirm
+      summary: 确认完成
+      description: 用户确认或 72 小时超时自动确认后进入待评价（SETTLING）：T+1 结算入余额，同时开放 72 小时评价入口。
+      parameters: [{$ref: '#/components/parameters/PathId'}]
+      responses:
+        '200': {$ref: '#/components/responses/OkVoid'}
+
+  /user/orders/{id}/days:
+    get:
+      tags: [用户端-订单与支付]
+      operationId: userOrderDays
+      summary: 多日订单子项列表
+      parameters: [{$ref: '#/components/parameters/PathId'}]
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Result'
+                  - {type: object, properties: {data: {type: array, items: {$ref: '#/components/schemas/OrderDayVO'}}}}
+
+  /user/orders/{id}/days/{dayId}:
+    put:
+      tags: [用户端-订单与支付]
+      operationId: userOrderDayUpdate
+      summary: 修改某天时间 / 暂停一天
+      parameters:
+        - {$ref: '#/components/parameters/PathId'}
+        - {$ref: '#/components/parameters/PathDayId'}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                action: {type: string, enum: [RESCHEDULE, SUSPEND], description: 改时间 / 暂停一天}
+                slotBegin: {type: string, example: "14:00"}
+                slotEnd: {type: string, example: "15:00"}
+      responses:
+        '200': {$ref: '#/components/responses/OkVoid'}
+
+  # ============================ 用户端：服务过程 ============================
+  /user/orders/{id}/progress:
+    get:
+      tags: [用户端-服务过程]
+      operationId: userOrderProgress
+      summary: 服务进度流
+      description: 已接单/出发/到达/服务中/完成等节点时间轴。
+      parameters: [{$ref: '#/components/parameters/PathId'}]
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Result'
+                  - {type: object, properties: {data: {type: array, items: {$ref: '#/components/schemas/ProgressNodeVO'}}}}
+
+  /user/orders/{id}/records:
+    get:
+      tags: [用户端-服务过程]
+      operationId: userOrderRecords
+      summary: 实时照片/视频流
+      description: 含到达打卡（定位 + 时间）与 SOP 各步骤影像，影像带水印；多日订单传 dayId 按天过滤，不传返回全部。
+      parameters:
+        - {$ref: '#/components/parameters/PathId'}
+        - {name: dayId, in: query, schema: {type: integer, format: int64, description: 多日订单子项 id}}
+        - {$ref: '#/components/parameters/Page'}
+        - {$ref: '#/components/parameters/PageSize'}
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Result'
+                  - {type: object, properties: {data: {allOf: [{$ref: '#/components/schemas/PageResult'}, {type: object, properties: {records: {type: array, items: {$ref: '#/components/schemas/ServiceRecordVO'}}}}]}}}
+
+  /user/orders/{id}/report:
+    get:
+      tags: [用户端-服务过程]
+      operationId: userOrderReport
+      summary: 查看服务报告
+      description: 结构化报告：进食、饮水、排泄、精神状态、异常观察（勾选 + 描述）+ 照片；异常项高亮并提示「建议就医」。多日订单每天一份：传 dayId 返回当天，不传返回全部。
+      parameters:
+        - {$ref: '#/components/parameters/PathId'}
+        - {name: dayId, in: query, schema: {type: integer, format: int64, description: 多日订单子项 id}}
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Result'
+                  - {type: object, properties: {data: {type: array, items: {$ref: '#/components/schemas/ServiceReportVO'}}}}
+
+  # ============================ 用户端：评价 ============================
+  /user/orders/{id}/review:
+    post:
+      tags: [用户端-评价]
+      operationId: userReviewCreate
+      summary: 提交评价
+      description: 完单后 72 小时内可评（窗口超时未评由定时任务归档为 FINISHED，之后不可再评）；4 个维度星级 + 文字 + 图。
+      parameters: [{$ref: '#/components/parameters/PathId'}]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/ReviewCreateDTO'}
+      responses:
+        '200': {$ref: '#/components/responses/OkVoid'}
+
+  # ============================ 用户端：申诉与消息 ============================
+  /user/orders/{id}/complaints:
+    post:
+      tags: [用户端-申诉与消息]
+      operationId: userComplaintCreate
+      summary: 一键申诉
+      description: 订单维度发起，触发结算冻结，客服 24 小时内介入。
+      parameters: [{$ref: '#/components/parameters/PathId'}]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [type, description]
+              properties:
+                type: {type: string, enum: [PET_ABNORMAL, ENV_ABNORMAL, SERVICE_QUALITY, REFUND_DISPUTE, OTHER]}
+                description: {type: string}
+                images: {type: array, items: {type: string}}
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Result'
+                  - {type: object, properties: {data: {type: integer, format: int64, description: 工单 id}}}
+
+  /user/complaints:
+    get:
+      tags: [用户端-申诉与消息]
+      operationId: userComplaintList
+      summary: 我的申诉列表
+      parameters: [{$ref: '#/components/parameters/Page'}, {$ref: '#/components/parameters/PageSize'}]
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Result'
+                  - {type: object, properties: {data: {allOf: [{$ref: '#/components/schemas/PageResult'}, {type: object, properties: {records: {type: array, items: {$ref: '#/components/schemas/ComplaintVO'}}}}]}}}
+
+  /user/subscriptions:
+    post:
+      tags: [用户端-申诉与消息]
+      operationId: userSubscriptionReport
+      summary: 上报订阅消息授权结果
+      description: 记录用户对派单成功、出发、到达、报告生成、退款进度等一次性订阅的授权结果，服务端据此推送。
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [templates, accepted]
+              properties:
+                templates: {type: array, items: {type: string, enum: [DISPATCHED, DEPARTED, ARRIVED, REPORT_READY, REFUND_PROGRESS]}}
+                accepted: {type: boolean}
+      responses:
+        '200': {$ref: '#/components/responses/OkVoid'}
+
+  # ============================ 用户端：个人中心 ============================
+  /user/home:
+    get:
+      tags: [用户端-个人中心]
+      operationId: userHome
+      summary: 个人中心聚合
+      description: 我的订单/宠物/服务师/地址入口与角标。
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Result'
+                  - {type: object, properties: {data: {$ref: '#/components/schemas/UserHomeVO'}}}
+
+  /user/entry-credentials/access-logs:
+    get:
+      tags: [用户端-个人中心]
+      operationId: userEntryCredentialLogs
+      summary: 入户密码查看记录
+      description: 合规要求：向用户展示其入户信息的查看/使用记录。
+      parameters: [{$ref: '#/components/parameters/Page'}, {$ref: '#/components/parameters/PageSize'}]
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Result'
+                  - {type: object, properties: {data: {allOf: [{$ref: '#/components/schemas/PageResult'}, {type: object, properties: {records: {type: array, items: {$ref: '#/components/schemas/EntryCredentialLogVO'}}}}]}}}
+
+  /user/account/cancellation:
+    post:
+      tags: [用户端-个人中心]
+      operationId: userAccountCancel
+      summary: 注销账号
+      description: 合规必需；注销前置校验：无进行中订单、无未结清资金。
+      responses:
+        '200': {$ref: '#/components/responses/OkVoid'}
+
+# ============================ 服务师端：入驻与认证 ============================
+  /provider/auth/login:
+    post:
+      tags: [服务师端-入驻与认证]
+      operationId: providerLogin
+      summary: 微信授权登录
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [code]
+              properties:
+                code: {type: string, description: wx.login 返回的 code}
+                phoneCode: {type: string}
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Result'
+                  - {type: object, properties: {data: {$ref: '#/components/schemas/LoginVO'}}}
+
+  /provider/auth/bind-phone:
+    post:
+      tags: [服务师端-入驻与认证]
+      operationId: providerBindPhone
+      summary: 绑定手机号
+      description: 登录时未携带 phoneCode 的服务师后续补绑。
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [phoneCode]
+              properties:
+                phoneCode: {type: string, description: 手机号快捷绑定 code}
+      responses:
+        '200': {$ref: '#/components/responses/OkVoid'}
+
+  /provider/applications:
+    post:
+      tags: [服务师端-入驻与认证]
+      operationId: providerApplicationCreate
+      summary: 提交入驻申请
+      description: 身份证正反面 + 活体人脸核身 + 从业经历与专长。
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/ProviderApplicationDTO'}
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Result'
+                  - {type: object, properties: {data: {type: integer, format: int64, description: 申请单 id}}}
+
+  /provider/applications/face-verify:
+    post:
+      tags: [服务师端-入驻与认证]
+      operationId: providerFaceVerify
+      summary: 活体人脸核身
+      description: 返回第三方核身 SDK 调用参数，核身结果异步回调。
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Result'
+                  - {type: object, properties: {data: {$ref: '#/components/schemas/FaceVerifyVO'}}}
+
+  /provider/applications/current:
+    get:
+      tags: [服务师端-入驻与认证]
+      operationId: providerApplicationCurrent
+      summary: 五重认证状态页
+      description: 实名、人脸核身、健康证、无犯罪记录、平台培训考核 五项进度透明展示，全部通过后才可接单。
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Result'
+                  - {type: object, properties: {data: {$ref: '#/components/schemas/CertificationStatusVO'}}}
+
+  /provider/certifications:
+    post:
+      tags: [服务师端-入驻与认证]
+      operationId: providerCertificationSubmit
+      summary: 提交资质材料
+      description: 健康证、职业资格/培训证书（有则加分）、无犯罪记录证明承诺 + 核查。
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/CertificationSubmitDTO'}
+      responses:
+        '200': {$ref: '#/components/responses/OkVoid'}
+
+  /provider/trainings:
+    get:
+      tags: [服务师端-入驻与认证]
+      operationId: providerTrainingList
+      summary: 平台培训课程列表
+      description: SOP 课程：喂养 / 洗护 / 医护 / 应急处理。
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Result'
+                  - {type: object, properties: {data: {type: array, items: {$ref: '#/components/schemas/TrainingCourseVO'}}}}
+
+  /provider/trainings/{id}/exam:
+    post:
+      tags: [服务师端-入驻与认证]
+      operationId: providerTrainingExam
+      summary: 提交培训考试
+      description: 考试 ≥80 分通过。
+      parameters: [{$ref: '#/components/parameters/PathId'}]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [answers]
+              properties:
+                answers: {type: array, items: {type: object, properties: {questionId: {type: integer, format: int64}, optionKey: {type: string}}}}
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Result'
+                  - {type: object, properties: {data: {$ref: '#/components/schemas/ExamResultVO'}}}
+
+  /provider/agreements/sign:
+    post:
+      tags: [服务师端-入驻与认证]
+      operationId: providerAgreementSign
+      summary: 签署电子协议
+      description: 合作协议、服务规范、违约责任（电子签名）。
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [agreementType, signature]
+              properties:
+                agreementType: {type: string, enum: [COOPERATION, SERVICE_STANDARD, LIABILITY]}
+                signature: {type: string, description: 电子签名图片 URL}
+      responses:
+        '200': {$ref: '#/components/responses/OkVoid'}
+
+  /provider/deposit/pay:
+    post:
+      tags: [服务师端-入驻与认证]
+      operationId: providerDepositPay
+      summary: 缴纳/冻结保证金
+      description: 退出满 30 天且无纠纷可退。
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                amount: {type: integer, description: 保证金金额（分）}
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Result'
+                  - {type: object, properties: {data: {$ref: '#/components/schemas/WxPayParamsVO'}}}
+
+  # ============================ 服务师端：工作台与接单 ============================
+  /provider/workbench/today:
+    get:
+      tags: [服务师端-工作台与接单]
+      operationId: providerWorkbenchToday
+      summary: 今日日程
+      parameters:
+        - {name: date, in: query, schema: {type: string, format: date, description: 默认今天}}
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Result'
+                  - {type: object, properties: {data: {type: array, items: {$ref: '#/components/schemas/ProviderOrderItemVO'}}}}
+
+  /provider/orders/pending:
+    get:
+      tags: [服务师端-工作台与接单]
+      operationId: providerPendingOrders
+      summary: 待响应指派单
+      description: 指派单需 15 分钟内响应，连续拒单降权。
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Result'
+                  - {type: object, properties: {data: {type: array, items: {$ref: '#/components/schemas/ProviderOrderItemVO'}}}}
+
+  /provider/orders/{id}/accept:
+    post:
+      tags: [服务师端-工作台与接单]
+      operationId: providerOrderAccept
+      summary: 接单
+      parameters: [{$ref: '#/components/parameters/PathId'}]
+      responses:
+        '200': {$ref: '#/components/responses/OkVoid'}
+
+  /provider/orders/{id}/reject:
+    post:
+      tags: [服务师端-工作台与接单]
+      operationId: providerOrderReject
+      summary: 拒单
+      parameters: [{$ref: '#/components/parameters/PathId'}]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [reason]
+              properties:
+                reason: {type: string}
+      responses:
+        '200': {$ref: '#/components/responses/OkVoid'}
+
+  /provider/schedules:
+    get:
+      tags: [服务师端-工作台与接单]
+      operationId: providerScheduleGet
+      summary: 查询排班设置
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Result'
+                  - {type: object, properties: {data: {$ref: '#/components/schemas/ScheduleSettingVO'}}}
+    put:
+      tags: [服务师端-工作台与接单]
+      operationId: providerScheduleUpdate
+      summary: 设置排班
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/ScheduleSettingDTO'}
+      responses:
+        '200': {$ref: '#/components/responses/OkVoid'}
+
+  /provider/orders/{id}/pet:
+    get:
+      tags: [服务师端-工作台与接单]
+      operationId: providerOrderPet
+      summary: 当单宠物档案（只读）
+      description: 含喂养指令，服务时自动带入 SOP。
+      parameters: [{$ref: '#/components/parameters/PathId'}]
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Result'
+                  - {type: object, properties: {data: {$ref: '#/components/schemas/PetVO'}}}
+
+  /provider/orders/{id}/contact:
+    get:
+      tags: [服务师端-工作台与接单]
+      operationId: providerOrderContact
+      summary: 获取用户虚拟号
+      description: 全链路虚拟号（隐私号），服务师不可见真实号码。
+      parameters: [{$ref: '#/components/parameters/PathId'}]
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Result'
+                  - {type: object, properties: {data: {type: object, properties: {virtualPhone: {type: string}, expireAt: {type: string}}}}}
+
+  /provider/orders/{id}/navigation:
+    get:
+      tags: [服务师端-工作台与接单]
+      operationId: providerOrderNavigation
+      summary: 获取导航坐标
+      description: 一键跳转地图导航至小区；服务时段前不返回完整门牌。
+      parameters: [{$ref: '#/components/parameters/PathId'}]
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Result'
+                  - {type: object, properties: {data: {type: object, properties: {longitude: {type: number, format: double}, latitude: {type: number, format: double}, community: {type: string}, detailAddress: {type: string, nullable: true, description: 仅服务时段返回完整门牌}}}}}
+
+  # ============================ 服务师端：服务执行 ============================
+  /provider/orders/{id}/checkin:
+    post:
+      tags: [服务师端-服务执行]
+      operationId: providerOrderCheckin
+      summary: 到达打卡
+      description: 含定位与时间；与地址定位偏差 >500m 无法打卡，需走异常上报。
+      parameters: [{$ref: '#/components/parameters/PathId'}]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [longitude, latitude]
+              properties:
+                longitude: {type: number, format: double}
+                latitude: {type: number, format: double}
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Result'
+                  - {type: object, properties: {data: {$ref: '#/components/schemas/CheckinVO'}}}
+
+  /provider/orders/{id}/sop:
+    get:
+      tags: [服务师端-服务执行]
+      operationId: providerOrderSop
+      summary: 获取 SOP 执行清单
+      description: 按服务类型生成：喂养类 = 喂食拍照 / 换水 / 铲屎 / 陪玩 / 门口检查；每步强制拍照（带水印）。
+      parameters: [{$ref: '#/components/parameters/PathId'}]
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Result'
+                  - {type: object, properties: {data: {$ref: '#/components/schemas/SopChecklistVO'}}}
+
+  /provider/orders/{id}/records:
+    post:
+      tags: [服务师端-服务执行]
+      operationId: providerOrderRecordUpload
+      summary: 上传服务记录（照片/视频）
+      description: 每步 SOP 强制拍照，可附 ≤60s 短视频；先经 /common/files/presign 直传 OSS。
+      parameters: [{$ref: '#/components/parameters/PathId'}]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [sopItemKey, mediaType, url]
+              properties:
+                sopItemKey: {type: string, description: SOP 步骤标识}
+                mediaType: {type: string, enum: [PHOTO, VIDEO]}
+                url: {type: string, description: 带水印的 OSS URL}
+                longitude: {type: number, format: double}
+                latitude: {type: number, format: double}
+                remark: {type: string}
+      responses:
+        '200': {$ref: '#/components/responses/OkVoid'}
+
+  /provider/orders/{id}/report:
+    post:
+      tags: [服务师端-服务执行]
+      operationId: providerOrderReportSubmit
+      summary: 提交服务报告
+      description: 结构化表单，必填项校验，异常项必填描述。
+      parameters: [{$ref: '#/components/parameters/PathId'}]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/ServiceReportSubmitDTO'}
+      responses:
+        '200': {$ref: '#/components/responses/OkVoid'}
+
+  /provider/orders/{id}/entry-credential/view:
+    post:
+      tags: [服务师端-服务执行]
+      operationId: providerOrderEntryCredentialView
+      summary: 查看入户密码
+      description: 仅服务时段内可见，查看行为全量留痕，服务完成即失效。
+      parameters: [{$ref: '#/components/parameters/PathId'}]
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Result'
+                  - {type: object, properties: {data: {$ref: '#/components/schemas/EntryCredentialVO'}}}
+
+  /provider/orders/{id}/exceptions:
+    post:
+      tags: [服务师端-服务执行]
+      operationId: providerOrderExceptionReport
+      summary: 异常上报
+      description: 宠物异常（呕吐/拒食/受伤）、环境异常（跑丢/物品损坏）一键上报，触发平台介入。
+      parameters: [{$ref: '#/components/parameters/PathId'}]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [type, description]
+              properties:
+                type: {type: string, description: 字典 exception_type}
+                description: {type: string}
+                images: {type: array, items: {type: string}}
+      responses:
+        '200': {$ref: '#/components/responses/OkVoid'}
+
+  # ============================ 服务师端：收入与提现 ============================
+  /provider/bank-cards:
+    get:
+      tags: [服务师端-收入与提现]
+      operationId: providerBankCardList
+      summary: 银行卡列表
+      description: 仅返回脱敏卡号；提现申请的 bankCardId 来源于此。
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Result'
+                  - {type: object, properties: {data: {type: array, items: {$ref: '#/components/schemas/BankCardVO'}}}}
+    post:
+      tags: [服务师端-收入与提现]
+      operationId: providerBankCardCreate
+      summary: 绑定银行卡
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/BankCardSaveDTO'}
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Result'
+                  - {type: object, properties: {data: {type: integer, format: int64, description: 新卡 id}}}
+
+  /provider/bank-cards/{id}:
+    delete:
+      tags: [服务师端-收入与提现]
+      operationId: providerBankCardDelete
+      summary: 解绑银行卡
+      description: 存在进行中提现单的卡不可解绑。
+      parameters: [{$ref: '#/components/parameters/PathId'}]
+      responses:
+        '200': {$ref: '#/components/responses/OkVoid'}
+    put:
+      tags: [服务师端-收入与提现]
+      operationId: providerBankCardSetDefault
+      summary: 设为默认卡
+      parameters: [{$ref: '#/components/parameters/PathId'}]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [isDefault]
+              properties:
+                isDefault: {type: boolean}
+      responses:
+        '200': {$ref: '#/components/responses/OkVoid'}
+
+  /provider/wallet:
+    get:
+      tags: [服务师端-收入与提现]
+      operationId: providerWalletGet
+      summary: 余额概览
+      description: 完单 T+1 入账；含可提现余额、冻结中金额、累计收入。
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Result'
+                  - {type: object, properties: {data: {$ref: '#/components/schemas/WalletVO'}}}
+
+  /provider/wallet/settlements:
+    get:
+      tags: [服务师端-收入与提现]
+      operationId: providerSettlementList
+      summary: 收入明细
+      description: 每单结算金额、平台服务费明细。
+      parameters:
+        - {name: begin, in: query, schema: {type: string, format: date}}
+        - {name: end, in: query, schema: {type: string, format: date}}
+        - {$ref: '#/components/parameters/Page'}
+        - {$ref: '#/components/parameters/PageSize'}
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Result'
+                  - {type: object, properties: {data: {allOf: [{$ref: '#/components/schemas/PageResult'}, {type: object, properties: {records: {type: array, items: {$ref: '#/components/schemas/SettlementVO'}}}}]}}}
+
+  /provider/withdrawals:
+    post:
+      tags: [服务师端-收入与提现]
+      operationId: providerWithdrawalCreate
+      summary: 提现申请
+      description: 每周提现至银行卡。需带 `Idempotency-Key`。
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [amount, bankCardId]
+              properties:
+                amount: {type: integer, description: 提现金额（分）}
+                bankCardId: {type: integer, format: int64}
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Result'
+                  - {type: object, properties: {data: {type: integer, format: int64, description: 提现单 id}}}
+    get:
+      tags: [服务师端-收入与提现]
+      operationId: providerWithdrawalList
+      summary: 提现记录
+      parameters: [{$ref: '#/components/parameters/Page'}, {$ref: '#/components/parameters/PageSize'}]
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Result'
+                  - {type: object, properties: {data: {allOf: [{$ref: '#/components/schemas/PageResult'}, {type: object, properties: {records: {type: array, items: {$ref: '#/components/schemas/WithdrawalVO'}}}}]}}}
+
+# ============================ 管理后台：认证与权限 ============================
+  /admin/auth/login:
+    post:
+      tags: [管理后台-认证与权限]
+      operationId: adminLogin
+      summary: 账号密码登录
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [username, password]
+              properties:
+                username: {type: string}
+                password: {type: string, format: password}
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Result'
+                  - {type: object, properties: {data: {$ref: '#/components/schemas/AdminLoginVO'}}}
+
+  /admin/auth/logout:
+    post:
+      tags: [管理后台-认证与权限]
+      operationId: adminLogout
+      summary: 退出登录
+      responses:
+        '200': {$ref: '#/components/responses/OkVoid'}
+
+  /admin/me:
+    get:
+      tags: [管理后台-认证与权限]
+      operationId: adminMe
+      summary: 当前登录用户与权限
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Result'
+                  - {type: object, properties: {data: {$ref: '#/components/schemas/AdminProfileVO'}}}
+
+  /admin/staff:
+    get:
+      tags: [管理后台-认证与权限]
+      operationId: adminStaffList
+      summary: 后台员工列表
+      description: 工单指派（assigneeId）选择客服时使用；仅返回 ACTIVE 员工。
+      parameters:
+        - {name: roleCode, in: query, schema: {type: string, description: 按角色过滤，如 CUSTOMER_SERVICE}}
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Result'
+                  - {type: object, properties: {data: {type: array, items: {$ref: '#/components/schemas/AdminStaffVO'}}}}
+
+  # ============================ 管理后台：订单调度 ============================
+  /admin/orders:
+    get:
+      tags: [管理后台-订单调度]
+      operationId: adminOrderList
+      summary: 订单池
+      parameters:
+        - {name: status, in: query, schema: {$ref: '#/components/schemas/OrderStatus'}}
+        - {name: providerId, in: query, schema: {type: integer, format: int64}}
+        - {name: keyword, in: query, schema: {type: string, description: 订单号 / 手机号 / 宠物名}}
+        - {name: begin, in: query, schema: {type: string, format: date}}
+        - {name: end, in: query, schema: {type: string, format: date}}
+        - {$ref: '#/components/parameters/Page'}
+        - {$ref: '#/components/parameters/PageSize'}
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Result'
+                  - {type: object, properties: {data: {allOf: [{$ref: '#/components/schemas/PageResult'}, {type: object, properties: {records: {type: array, items: {$ref: '#/components/schemas/AdminOrderVO'}}}}]}}}
+
+  /admin/orders/alerts:
+    get:
+      tags: [管理后台-订单调度]
+      operationId: adminOrderAlerts
+      summary: 异常订单告警
+      description: 超时未接单、打卡定位偏差、异常上报三类。
+      parameters:
+        - {name: type, in: query, schema: {type: string, enum: [TIMEOUT_NO_ACCEPT, CHECKIN_DEVIATION, PROVIDER_EXCEPTION, USER_COMPLAINT, PAYMENT_ABNORMAL]}}
+        - {name: handled, in: query, schema: {type: boolean}}
+        - {$ref: '#/components/parameters/Page'}
+        - {$ref: '#/components/parameters/PageSize'}
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Result'
+                  - {type: object, properties: {data: {allOf: [{$ref: '#/components/schemas/PageResult'}, {type: object, properties: {records: {type: array, items: {$ref: '#/components/schemas/OrderAlertVO'}}}}]}}}
+
+  /admin/orders/{id}:
+    get:
+      tags: [管理后台-订单调度]
+      operationId: adminOrderGet
+      summary: 订单详情
+      description: 含服务记录、报告、支付与结算流水、审计留痕。
+      parameters: [{$ref: '#/components/parameters/PathId'}]
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Result'
+                  - {type: object, properties: {data: {$ref: '#/components/schemas/AdminOrderDetailVO'}}}
+
+  /admin/orders/{id}/dispatch:
+    post:
+      tags: [管理后台-订单调度]
+      operationId: adminOrderDispatch
+      summary: 派单
+      description: 按距离 → 评分 → 当前负载推荐；高危/特殊订单只派给具备对应认证标签的服务师。
+      parameters: [{$ref: '#/components/parameters/PathId'}]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [providerId]
+              properties:
+                providerId: {type: integer, format: int64}
+                remark: {type: string}
+      responses:
+        '200': {$ref: '#/components/responses/OkVoid'}
+
+  /admin/orders/{id}/reassign:
+    post:
+      tags: [管理后台-订单调度]
+      operationId: adminOrderReassign
+      summary: 改派
+      description: 服务师取消或超时未接时改派；无服务师可接则全额退款 + 补偿券。
+      parameters: [{$ref: '#/components/parameters/PathId'}]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [providerId, reason]
+              properties:
+                providerId: {type: integer, format: int64}
+                reason: {type: string}
+      responses:
+        '200': {$ref: '#/components/responses/OkVoid'}
+
+  /admin/orders/{id}/cancel:
+    post:
+      tags: [管理后台-订单调度]
+      operationId: adminOrderCancel
+      summary: 取消订单
+      parameters: [{$ref: '#/components/parameters/PathId'}]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [reason]
+              properties:
+                reason: {type: string}
+                refundAll: {type: boolean, default: true}
+      responses:
+        '200': {$ref: '#/components/responses/OkVoid'}
+
+  /admin/orders/{id}/refund/approve:
+    post:
+      tags: [管理后台-订单调度]
+      operationId: adminOrderRefundApprove
+      summary: 退款审批（用户申请的退款）
+      description: 审批用户通过 /user/orders/{id}/refund 发起的退款申请；批准后原路退回。
+      parameters: [{$ref: '#/components/parameters/PathId'}]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [approved, amount]
+              properties:
+                approved: {type: boolean}
+                amount: {type: integer, description: 批准退款金额（分）}
+                remark: {type: string}
+      responses:
+        '200': {$ref: '#/components/responses/OkVoid'}
+
+  # ============================ 管理后台：服务师管理 ============================
+  /admin/providers:
+    get:
+      tags: [管理后台-服务师管理]
+      operationId: adminProviderList
+      summary: 服务师列表
+      parameters:
+        - {name: keyword, in: query, schema: {type: string}}
+        - {name: certStatus, in: query, schema: {type: string, enum: [PENDING, APPROVED, REJECTED]}}
+        - {name: status, in: query, schema: {type: string, enum: [PENDING, ACTIVE, SUSPENDED, BANNED, QUIT]}}
+        - {$ref: '#/components/parameters/Page'}
+        - {$ref: '#/components/parameters/PageSize'}
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Result'
+                  - {type: object, properties: {data: {allOf: [{$ref: '#/components/schemas/PageResult'}, {type: object, properties: {records: {type: array, items: {$ref: '#/components/schemas/AdminProviderVO'}}}}]}}}
+
+  /admin/providers/applications:
+    get:
+      tags: [管理后台-服务师管理]
+      operationId: adminProviderApplicationList
+      summary: 入驻审核列表
+      description: 证照核验；平台审核时限 3 个工作日。
+      parameters:
+        - {name: status, in: query, schema: {type: string, enum: [SUBMITTED, REVIEWING, APPROVED, REJECTED]}}
+        - {$ref: '#/components/parameters/Page'}
+        - {$ref: '#/components/parameters/PageSize'}
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Result'
+                  - {type: object, properties: {data: {allOf: [{$ref: '#/components/schemas/PageResult'}, {type: object, properties: {records: {type: array, items: {$ref: '#/components/schemas/ProviderApplicationVO'}}}}]}}}
+
+  /admin/providers/applications/{id}/audit:
+    post:
+      tags: [管理后台-服务师管理]
+      operationId: adminProviderApplicationAudit
+      summary: 入驻审核
+      parameters: [{$ref: '#/components/parameters/PathId'}]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [approved]
+              properties:
+                approved: {type: boolean}
+                rejectReason: {type: string, nullable: true}
+      responses:
+        '200': {$ref: '#/components/responses/OkVoid'}
+
+  /admin/providers/{id}:
+    get:
+      tags: [管理后台-服务师管理]
+      operationId: adminProviderGet
+      summary: 服务师详情
+      parameters: [{$ref: '#/components/parameters/PathId'}]
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Result'
+                  - {type: object, properties: {data: {$ref: '#/components/schemas/AdminProviderDetailVO'}}}
+
+  /admin/providers/{id}/certifications/audit:
+    post:
+      tags: [管理后台-服务师管理]
+      operationId: adminProviderCertAudit
+      summary: 认证项审核
+      parameters: [{$ref: '#/components/parameters/PathId'}]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [certType, approved]
+              properties:
+                certType: {type: string, enum: [REAL_NAME, FACE, HEALTH_CERT, NO_CRIMINAL, QUALIFICATION, PLATFORM_TRAINING]}
+                approved: {type: boolean}
+                remark: {type: string}
+      responses:
+        '200': {$ref: '#/components/responses/OkVoid'}
+
+  /admin/providers/{id}/punishments:
+    post:
+      tags: [管理后台-服务师管理]
+      operationId: adminProviderPunishment
+      summary: 奖惩与封禁
+      parameters: [{$ref: '#/components/parameters/PathId'}]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [type, reason]
+              properties:
+                type: {type: string, enum: [WARNING, FINE, SUSPEND, BAN, REWARD]}
+                reason: {type: string}
+                amount: {type: integer, description: 罚款/奖励金额（分），可选}
+                durationDays: {type: integer, description: 封禁天数，可选}
+      responses:
+        '200': {$ref: '#/components/responses/OkVoid'}
+
+  /admin/providers/{id}/deposit:
+    get:
+      tags: [管理后台-服务师管理]
+      operationId: adminProviderDepositGet
+      summary: 保证金台账（单服务师）
+      parameters: [{$ref: '#/components/parameters/PathId'}]
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Result'
+                  - {type: object, properties: {data: {$ref: '#/components/schemas/DepositLedgerVO'}}}
+
+  # ============================ 管理后台：用户与宠物 ============================
+  /admin/users:
+    get:
+      tags: [管理后台-用户与宠物]
+      operationId: adminUserList
+      summary: 用户查询
+      parameters:
+        - {name: keyword, in: query, schema: {type: string, description: 昵称 / 手机号}}
+        - {name: blacklisted, in: query, schema: {type: boolean}}
+        - {$ref: '#/components/parameters/Page'}
+        - {$ref: '#/components/parameters/PageSize'}
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Result'
+                  - {type: object, properties: {data: {allOf: [{$ref: '#/components/schemas/PageResult'}, {type: object, properties: {records: {type: array, items: {$ref: '#/components/schemas/AdminUserVO'}}}}]}}}
+
+  /admin/users/{id}:
+    get:
+      tags: [管理后台-用户与宠物]
+      operationId: adminUserGet
+      summary: 用户详情
+      description: 含订单、宠物、客诉标记；查看完整信息需高权限且全量留痕。
+      parameters: [{$ref: '#/components/parameters/PathId'}]
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Result'
+                  - {type: object, properties: {data: {$ref: '#/components/schemas/AdminUserDetailVO'}}}
+
+  /admin/users/{id}/complaint-mark:
+    post:
+      tags: [管理后台-用户与宠物]
+      operationId: adminUserComplaintMark
+      summary: 客诉标记
+      parameters: [{$ref: '#/components/parameters/PathId'}]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [marked]
+              properties:
+                marked: {type: boolean}
+                remark: {type: string}
+      responses:
+        '200': {$ref: '#/components/responses/OkVoid'}
+
+  /admin/users/{id}/blacklist:
+    post:
+      tags: [管理后台-用户与宠物]
+      operationId: adminUserBlacklist
+      summary: 加入/移出黑名单
+      parameters: [{$ref: '#/components/parameters/PathId'}]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [blacklisted, reason]
+              properties:
+                blacklisted: {type: boolean}
+                reason: {type: string}
+      responses:
+        '200': {$ref: '#/components/responses/OkVoid'}
+
+  /admin/pets:
+    get:
+      tags: [管理后台-用户与宠物]
+      operationId: adminPetList
+      summary: 宠物档案查询
+      parameters:
+        - {name: userId, in: query, schema: {type: integer, format: int64}}
+        - {name: keyword, in: query, schema: {type: string}}
+        - {$ref: '#/components/parameters/Page'}
+        - {$ref: '#/components/parameters/PageSize'}
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Result'
+                  - {type: object, properties: {data: {allOf: [{$ref: '#/components/schemas/PageResult'}, {type: object, properties: {records: {type: array, items: {$ref: '#/components/schemas/PetVO'}}}}]}}}
+
+  # ============================ 管理后台：财务 ============================
+  /admin/finance/reconciliations:
+    get:
+      tags: [管理后台-财务]
+      operationId: adminReconciliationList
+      summary: 微信支付对账
+      parameters:
+        - {name: billDate, in: query, required: true, schema: {type: string, format: date}}
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Result'
+                  - {type: object, properties: {data: {$ref: '#/components/schemas/ReconciliationVO'}}}
+
+  /admin/finance/settlement-rules:
+    get:
+      tags: [管理后台-财务]
+      operationId: adminSettlementRuleGet
+      summary: 查询分账规则
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Result'
+                  - {type: object, properties: {data: {$ref: '#/components/schemas/SettlementRuleVO'}}}
+    put:
+      tags: [管理后台-财务]
+      operationId: adminSettlementRuleUpdate
+      summary: 配置分账规则
+      description: 平台向服务师收取订单金额 15%-20% 服务费（含获客与结算成本）。
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/SettlementRuleDTO'}
+      responses:
+        '200': {$ref: '#/components/responses/OkVoid'}
+
+  /admin/finance/withdrawals:
+    get:
+      tags: [管理后台-财务]
+      operationId: adminWithdrawalList
+      summary: 提现审核列表
+      parameters:
+        - {name: status, in: query, schema: {type: string, enum: [APPLIED, APPROVED, PAID, REJECTED]}}
+        - {$ref: '#/components/parameters/Page'}
+        - {$ref: '#/components/parameters/PageSize'}
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Result'
+                  - {type: object, properties: {data: {allOf: [{$ref: '#/components/schemas/PageResult'}, {type: object, properties: {records: {type: array, items: {$ref: '#/components/schemas/WithdrawalVO'}}}}]}}}
+
+  /admin/finance/withdrawals/{id}/audit:
+    post:
+      tags: [管理后台-财务]
+      operationId: adminWithdrawalAudit
+      summary: 提现审核
+      parameters: [{$ref: '#/components/parameters/PathId'}]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [approved]
+              properties:
+                approved: {type: boolean}
+                remark: {type: string}
+      responses:
+        '200': {$ref: '#/components/responses/OkVoid'}
+
+  /admin/finance/refunds:
+    post:
+      tags: [管理后台-财务]
+      operationId: adminRefundExecute
+      summary: 平台主动退款
+      description: 平台侧直接发起并执行的退款（改派失败全额退、先行赔付后追退等）；与退款审批不同，无用户申请前置。
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [orderId, amount]
+              properties:
+                orderId: {type: integer, format: int64}
+                amount: {type: integer, description: 退款金额（分）}
+                remark: {type: string}
+      responses:
+        '200': {$ref: '#/components/responses/OkVoid'}
+
+  /admin/finance/deposits:
+    get:
+      tags: [管理后台-财务]
+      operationId: adminDepositList
+      summary: 保证金台账
+      parameters: [{$ref: '#/components/parameters/Page'}, {$ref: '#/components/parameters/PageSize'}]
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Result'
+                  - {type: object, properties: {data: {allOf: [{$ref: '#/components/schemas/PageResult'}, {type: object, properties: {records: {type: array, items: {$ref: '#/components/schemas/DepositLedgerVO'}}}}]}}}
+
+  # ============================ 管理后台：客诉工单 ============================
+  /admin/complaints:
+    get:
+      tags: [管理后台-客诉工单]
+      operationId: adminComplaintList
+      summary: 工单列表
+      parameters:
+        - {name: status, in: query, schema: {type: string, enum: [PENDING, PROCESSING, RESOLVED, CLOSED]}}
+        - {name: type, in: query, schema: {type: string}}
+        - {$ref: '#/components/parameters/Page'}
+        - {$ref: '#/components/parameters/PageSize'}
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Result'
+                  - {type: object, properties: {data: {allOf: [{$ref: '#/components/schemas/PageResult'}, {type: object, properties: {records: {type: array, items: {$ref: '#/components/schemas/ComplaintVO'}}}}]}}}
+
+  /admin/complaints/{id}:
+    get:
+      tags: [管理后台-客诉工单]
+      operationId: adminComplaintGet
+      summary: 工单详情
+      parameters: [{$ref: '#/components/parameters/PathId'}]
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Result'
+                  - {type: object, properties: {data: {$ref: '#/components/schemas/ComplaintDetailVO'}}}
+
+  /admin/complaints/{id}/assign:
+    post:
+      tags: [管理后台-客诉工单]
+      operationId: adminComplaintAssign
+      summary: 工单流转
+      parameters: [{$ref: '#/components/parameters/PathId'}]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [assigneeId]
+              properties:
+                assigneeId: {type: integer, format: int64, description: 客服账号 id}
+                remark: {type: string}
+      responses:
+        '200': {$ref: '#/components/responses/OkVoid'}
+
+  /admin/complaints/{id}/resolve:
+    post:
+      tags: [管理后台-客诉工单]
+      operationId: adminComplaintResolve
+      summary: 处理与赔付方案
+      description: 客服 24 小时内介入；可冻结结算。
+      parameters: [{$ref: '#/components/parameters/PathId'}]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [resolution]
+              properties:
+                resolution: {type: string}
+                compensationAmount: {type: integer, description: 赔付金额（分）}
+                freezeSettlement: {type: boolean, default: false}
+      responses:
+        '200': {$ref: '#/components/responses/OkVoid'}
+
+  /admin/complaints/{id}/advance-payment:
+    post:
+      tags: [管理后台-客诉工单]
+      operationId: adminComplaintAdvancePayment
+      summary: 先行赔付
+      parameters: [{$ref: '#/components/parameters/PathId'}]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [amount]
+              properties:
+                amount: {type: integer, description: 先行赔付金额（分）}
+                remark: {type: string}
+      responses:
+        '200': {$ref: '#/components/responses/OkVoid'}
+
+  # ============================ 管理后台：审计日志 ============================
+  /admin/roles:
+    get:
+      tags: [管理后台-审计日志]
+      operationId: adminRoleList
+      summary: 角色列表
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Result'
+                  - {type: object, properties: {data: {type: array, items: {$ref: '#/components/schemas/AdminRoleVO'}}}}
+
+  /admin/roles/{id}:
+    put:
+      tags: [管理后台-审计日志]
+      operationId: adminRoleUpdate
+      summary: 配置角色权限
+      parameters: [{$ref: '#/components/parameters/PathId'}]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [permissions]
+              properties:
+                permissions: {type: array, items: {type: string}}
+      responses:
+        '200': {$ref: '#/components/responses/OkVoid'}
+
+  /admin/audit-logs:
+    get:
+      tags: [管理后台-审计日志]
+      operationId: adminAuditLogList
+      summary: 敏感操作审计日志
+      description: 查看用户入户信息、退款、封禁等敏感操作全量留痕。
+      parameters:
+        - {name: operatorId, in: query, schema: {type: integer, format: int64}}
+        - {name: action, in: query, schema: {type: string}}
+        - {name: begin, in: query, schema: {type: string, format: date}}
+        - {name: end, in: query, schema: {type: string, format: date}}
+        - {$ref: '#/components/parameters/Page'}
+        - {$ref: '#/components/parameters/PageSize'}
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Result'
+                  - {type: object, properties: {data: {allOf: [{$ref: '#/components/schemas/PageResult'}, {type: object, properties: {records: {type: array, items: {$ref: '#/components/schemas/AuditLogVO'}}}}]}}}
+
+  # ============================ 回调 ============================
+  /callback/wechat/pay:
+    post:
+      tags: [回调]
+      operationId: callbackWechatPay
+      summary: 微信支付结果通知
+      description: 微信支付异步通知；验签后按商户单号路由业务类型：ORDER-更新订单支付状态并进入派单；DEPOSIT-确认保证金缴纳并写入台账。需在 5s 内返回成功。
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                id: {type: string, description: 微信支付通知 id}
+                event_type: {type: string}
+                resource: {type: object, description: 加密的支付结果密文}
+      responses:
+        '200':
+          description: 处理成功
+          content:
+            application/json:
+              schema: {type: object, properties: {code: {type: string, example: SUCCESS}, message: {type: string, example: 成功}}}
+
+  /callback/wechat/face-verify:
+    post:
+      tags: [回调]
+      operationId: callbackFaceVerify
+      summary: 人脸核身结果通知
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                bizId: {type: string}
+                passed: {type: boolean}
+                reason: {type: string, nullable: true}
+      responses:
+        '200':
+          description: 处理成功
+          content:
+            application/json:
+              schema: {type: object, properties: {code: {type: string, example: SUCCESS}}}
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: 登录后下发的 JWT；请求头 Authorization Bearer token
+
+  parameters:
+    PathId:
+      name: id
+      in: path
+      required: true
+      description: 资源主键
+      schema: {type: integer, format: int64}
+    PathDayId:
+      name: dayId
+      in: path
+      required: true
+      description: 多日订单子项 OrderDay 主键
+      schema: {type: integer, format: int64}
+    Page:
+      name: page
+      in: query
+      required: false
+      description: 页码，从 1 开始
+      schema: {type: integer, minimum: 1, default: 1}
+    PageSize:
+      name: pageSize
+      in: query
+      required: false
+      description: 每页条数
+      schema: {type: integer, minimum: 1, maximum: 100, default: 10}
+
+  responses:
+    OkVoid:
+      description: 操作成功
+      content:
+        application/json:
+          schema: {$ref: '#/components/schemas/Result'}
+
+  schemas:
+    # ---------- 通用 ----------
+    Result:
+      type: object
+      description: 统一响应体
+      properties:
+        code: {type: integer, example: 1, description: 1 成功 0 失败}
+        msg: {type: string, nullable: true, description: 提示信息}
+        data: {nullable: true, description: 业务数据}
+    PageResult:
+      type: object
+      description: 分页结果基类
+      properties:
+        total: {type: integer, format: int64, description: 总记录数}
+        records: {type: array, items: {}, description: 数据列表}
+    FileBizType:
+      type: string
+      description: 文件业务类型
+      enum: [PET_AVATAR, PET_VACCINE, SERVICE_RECORD, SERVICE_REPORT, PROVIDER_ID_CARD, PROVIDER_HEALTH_CERT, PROVIDER_QUALIFICATION, COMPLAINT_EVIDENCE, REVIEW_IMAGE, OTHER]
+    PresignVO:
+      type: object
+      description: OSS 直传凭证
+      properties:
+        uploadUrl: {type: string, description: 直传地址}
+        method: {type: string, example: PUT}
+        headers: {type: object, additionalProperties: {type: string}, description: 直传所需请求头}
+        objectKey: {type: string, description: 对象 Key}
+        fileUrl: {type: string, description: 访问地址}
+        expireAt: {type: string, format: date-time, description: 凭证过期时间}
+    DictItem:
+      type: object
+      properties:
+        key: {type: string}
+        value: {type: string}
+        sort: {type: integer}
+
+    # ---------- 用户端 ----------
+    LoginVO:
+      type: object
+      description: 登录结果
+      properties:
+        token: {type: string, description: JWT}
+        userId: {type: integer, format: int64, nullable: true}
+        openid: {type: string, nullable: true}
+        needBindPhone: {type: boolean, description: 是否需要绑定手机号}
+    UserProfileVO:
+      type: object
+      properties:
+        id: {type: integer, format: int64}
+        nickname: {type: string}
+        avatar: {type: string, nullable: true}
+        phone: {type: string, description: 脱敏手机号}
+    AddressVO:
+      type: object
+      description: 地址与入户方式
+      properties:
+        id: {type: integer, format: int64}
+        contactName: {type: string}
+        contactPhone: {type: string}
+        city: {type: string}
+        district: {type: string}
+        community: {type: string, description: 小区}
+        detail: {type: string, description: 门牌等详细地址}
+        longitude: {type: number, format: double}
+        latitude: {type: number, format: double}
+        entryMode: {type: string, enum: [SMART_LOCK, PROPERTY, KEY_DEPOSIT, AT_HOME], description: 入户方式}
+        entryNoteMasked: {type: string, nullable: true, description: 入户凭证脱敏展示}
+        isDefault: {type: boolean}
+    AddressSaveDTO:
+      type: object
+      required: [contactName, contactPhone, community, detail, entryMode]
+      properties:
+        contactName: {type: string}
+        contactPhone: {type: string}
+        city: {type: string}
+        district: {type: string}
+        community: {type: string}
+        detail: {type: string}
+        longitude: {type: number, format: double}
+        latitude: {type: number, format: double}
+        entryMode: {type: string, enum: [SMART_LOCK, PROPERTY, KEY_DEPOSIT, AT_HOME]}
+        entrySecret: {type: string, nullable: true, description: 入户凭证（智能门锁临时密码/钥匙寄存位置等），加密存储}
+        isDefault: {type: boolean}
+    PetVO:
+      type: object
+      properties:
+        id: {type: integer, format: int64}
+        name: {type: string}
+        species: {type: string, description: 物种}
+        breed: {type: string, nullable: true, description: 品种}
+        gender: {type: string, enum: [MALE, FEMALE, UNKNOWN]}
+        birthday: {type: string, format: date, nullable: true}
+        ageText: {type: string, nullable: true}
+        weightKg: {type: number, format: double, nullable: true}
+        sterilized: {type: boolean, description: 是否绝育}
+        avatar: {type: string, nullable: true}
+        personalityTags: {type: array, items: {type: string}, description: 性格标签}
+        personalityNote: {type: string, nullable: true}
+        allergies: {type: string, nullable: true, description: 过敏与禁忌}
+        chronicDisease: {type: string, nullable: true, description: 慢病与用药}
+        feedingInstruction:
+          type: object
+          nullable: true
+          description: 喂养指令，服务时自动带入 SOP
+          properties:
+            dailyFoodGram: {type: integer, nullable: true, description: 每日粮量 g}
+            feedTimes: {type: integer, nullable: true, description: 每日喂食次数}
+            waterNote: {type: string, nullable: true}
+            litterOrWalkNote: {type: string, nullable: true, description: 猫砂或遛弯习惯}
+        vaccinations:
+          type: array
+          items: {$ref: '#/components/schemas/VaccinationDTO'}
+        completeness: {type: integer, nullable: true, description: 档案完整度百分比}
+    PetSaveDTO:
+      type: object
+      required: [name, species]
+      properties:
+        name: {type: string}
+        species: {type: string}
+        breed: {type: string}
+        gender: {type: string, enum: [MALE, FEMALE, UNKNOWN]}
+        birthday: {type: string, format: date}
+        weightKg: {type: number, format: double}
+        sterilized: {type: boolean}
+        avatar: {type: string}
+        personalityTags: {type: array, items: {type: string}}
+        personalityNote: {type: string}
+        allergies: {type: string}
+        chronicDisease: {type: string}
+        feedingInstruction:
+          type: object
+          properties:
+            dailyFoodGram: {type: integer}
+            feedTimes: {type: integer}
+            waterNote: {type: string}
+            litterOrWalkNote: {type: string}
+    VaccinationDTO:
+      type: object
+      properties:
+        id: {type: integer, format: int64, readOnly: true}
+        vaccineName: {type: string}
+        vaccinatedAt: {type: string, format: date}
+        nextAt: {type: string, format: date, nullable: true}
+        certificateUrl: {type: string, nullable: true, description: 疫苗本照片}
+    ServiceVO:
+      type: object
+      description: 服务类目 SKU 简要
+      properties:
+        id: {type: integer, format: int64}
+        name: {type: string, example: 上门喂养}
+        category: {type: string, enum: [FEEDING, GROOMING, MEDICAL]}
+        coverUrl: {type: string}
+        priceFrom: {type: integer, description: 起步价（分）}
+        durationMinutes: {type: integer}
+        tags: {type: array, items: {type: string}}
+    ServiceDetailVO:
+      allOf:
+        - $ref: '#/components/schemas/ServiceVO'
+        - type: object
+          properties:
+            contentItems: {type: array, items: {type: string}, description: 服务内容清单}
+            priceRules:
+              type: array
+              description: 计价规则
+              items:
+                type: object
+                properties:
+                  ruleType: {type: string, enum: [BASE, EXTRA_PET, WEIGHT, DISTANCE]}
+                  label: {type: string}
+                  amount: {type: integer, description: 金额（分）}
+            notice: {type: string, description: 服务须知}
+            refundPolicy: {type: string, description: 退款规则}
+    PriceCalcDTO:
+      type: object
+      required: [serviceId, petIds, addressId]
+      properties:
+        serviceId: {type: integer, format: int64}
+        petIds: {type: array, items: {type: integer, format: int64}}
+        addressId: {type: integer, format: int64}
+        days: {type: integer, default: 1, description: 连续天数}
+    PriceCalcVO:
+      type: object
+      properties:
+        baseAmount: {type: integer, description: 基础金额（分）}
+        extraAmount: {type: integer, description: 加价金额（分）}
+        totalAmount: {type: integer, description: 合计（分）}
+        breakdown:
+          type: array
+          items:
+            type: object
+            properties:
+              label: {type: string}
+              amount: {type: integer}
+    TimeSlotVO:
+      type: object
+      properties:
+        date: {type: string, format: date}
+        slot: {type: string, example: '14:00-15:00'}
+        available: {type: boolean}
+        remain: {type: integer, description: 剩余可接单名额}
+    ProviderBriefVO:
+      type: object
+      properties:
+        id: {type: integer, format: int64}
+        displayName: {type: string, description: 脱敏姓名}
+        avatar: {type: string}
+        years: {type: integer, description: 从业年限}
+        badges: {type: array, items: {type: string}, description: 认证徽章}
+        specialties: {type: array, items: {type: string}}
+        serviceCount: {type: integer}
+        rating: {type: number, format: double}
+        distanceKm: {type: number, format: double, nullable: true}
+        favorited: {type: boolean}
+    ProviderDetailVO:
+      allOf:
+        - $ref: '#/components/schemas/ProviderBriefVO'
+        - type: object
+          properties:
+            intro: {type: string}
+            certifications: {type: array, items: {$ref: '#/components/schemas/CertificationStatusVO'}}
+            gallery: {type: array, items: {type: string}, description: 历史服务相册（脱敏）}
+            ratingDetail:
+              type: object
+              properties:
+                professional: {type: number, format: double}
+                punctual: {type: number, format: double}
+                communication: {type: number, format: double}
+                care: {type: number, format: double}
+    ReviewVO:
+      type: object
+      properties:
+        id: {type: integer, format: int64}
+        orderId: {type: integer, format: int64}
+        userName: {type: string, description: 脱敏用户名}
+        userAvatar: {type: string}
+        scoreProfessional: {type: integer}
+        scorePunctual: {type: integer}
+        scoreCommunication: {type: integer}
+        scoreCare: {type: integer}
+        avgScore: {type: number, format: double}
+        content: {type: string}
+        images: {type: array, items: {type: string}}
+        createdAt: {type: string}
+    OrderStatus:
+      type: string
+      description: 订单状态。SETTLING=已确认·待评价（开放 72 小时评价窗口）；REVIEWED（已评价）与 FINISHED（已完成·未评价，评价窗口超时由定时任务归档）为正常完结的终态
+      enum: [PENDING_PAY, PENDING_ACCEPT, ACCEPTED, DEPARTED, ARRIVED, SERVING, PENDING_CONFIRM, SETTLING, REVIEWED, FINISHED, CANCELLED, REFUNDING, REFUNDED, DISPUTED]
+    OrderCreateDTO:
+      type: object
+      required: [serviceId, petIds, addressId, startDate, timeSlot]
+      properties:
+        serviceId: {type: integer, format: int64}
+        providerId: {type: integer, format: int64, nullable: true, description: 指定服务师，不传则平台派单}
+        petIds: {type: array, items: {type: integer, format: int64}}
+        addressId: {type: integer, format: int64}
+        entryMode: {type: string, enum: [SMART_LOCK, PROPERTY, KEY_DEPOSIT, AT_HOME]}
+        startDate: {type: string, format: date}
+        days: {type: integer, default: 1, description: 连续多日预约天数}
+        timeSlot: {type: string, example: '14:00-15:00'}
+        remark: {type: string, nullable: true}
+    OrderCreateVO:
+      type: object
+      properties:
+        orderId: {type: integer, format: int64}
+        orderNo: {type: string}
+        totalAmount: {type: integer, description: 应付金额（分）}
+        payExpireAt: {type: string, description: 支付截止时间（下单后 15 分钟）}
+    OrderVO:
+      type: object
+      properties:
+        id: {type: integer, format: int64}
+        orderNo: {type: string}
+        status: {$ref: '#/components/schemas/OrderStatus'}
+        statusText: {type: string}
+        serviceName: {type: string}
+        coverUrl: {type: string}
+        petNames: {type: array, items: {type: string}}
+        startDate: {type: string, format: date}
+        days: {type: integer, description: 连续天数}
+        timeSlot: {type: string}
+        totalAmount: {type: integer, description: 金额（分）}
+        provider: {$ref: '#/components/schemas/ProviderBriefVO'}
+        createdAt: {type: string}
+    OrderDetailVO:
+      allOf:
+        - $ref: '#/components/schemas/OrderVO'
+        - type: object
+          properties:
+            address: {$ref: '#/components/schemas/AddressVO'}
+            pets: {type: array, items: {$ref: '#/components/schemas/PetVO'}}
+            serviceAmount: {type: integer, description: 服务金额（分）}
+            discountAmount: {type: integer, description: 优惠金额（分）}
+            payAmount: {type: integer, description: 实付（分）}
+            payTime: {type: string, nullable: true}
+            cancelRuleText: {type: string, description: 取消规则说明}
+            providerContact: {type: string, nullable: true, description: 虚拟号，仅已接单后可见}
+            dayList: {type: array, items: {$ref: '#/components/schemas/OrderDayVO'}, description: 多日订单子项}
+            canCancel: {type: boolean}
+            canConfirm: {type: boolean}
+            canReview: {type: boolean}
+    WxPayParamsVO:
+      type: object
+      description: 微信支付调起参数
+      properties:
+        prepayId: {type: string}
+        nonceStr: {type: string}
+        timeStamp: {type: string}
+        signType: {type: string, example: RSA}
+        paySign: {type: string}
+        package: {type: string}
+    CancelPreviewVO:
+      type: object
+      description: 取消/退款试算结果
+      properties:
+        refundAmount: {type: integer, description: 可退金额（分）}
+        penaltyAmount: {type: integer, description: 违约金（分）}
+        ruleText: {type: string}
+        freeCancel: {type: boolean}
+    OrderDayVO:
+      type: object
+      description: 连续多日订单的每日子项
+      properties:
+        id: {type: integer, format: int64}
+        date: {type: string, format: date}
+        timeSlot: {type: string}
+        status: {type: string, enum: [PENDING, SERVING, DONE, PAUSED, CANCELLED]}
+        paused: {type: boolean}
+    ProgressNodeVO:
+      type: object
+      description: 服务进度节点
+      properties:
+        node: {type: string, description: 节点编码}
+        title: {type: string, example: 服务师已到达}
+        time: {type: string, nullable: true}
+        done: {type: boolean}
+        description: {type: string, nullable: true}
+    ServiceRecordVO:
+      type: object
+      description: 服务过程记录（打卡/照片/视频/文字）
+      properties:
+        id: {type: integer, format: int64}
+        dayId: {type: integer, format: int64, description: 多日订单子项 id，照片流按天分组}
+        type: {type: string, enum: [CHECKIN, PHOTO, VIDEO, NOTE]}
+        mediaUrl: {type: string, nullable: true}
+        watermarked: {type: boolean, description: 是否已加时间定位水印}
+        longitude: {type: number, format: double, nullable: true}
+        latitude: {type: number, format: double, nullable: true}
+        capturedAt: {type: string}
+    ServiceReportVO:
+      type: object
+      description: 结构化服务报告
+      properties:
+        id: {type: integer, format: int64}
+        orderId: {type: integer, format: int64}
+        dayId: {type: integer, format: int64, nullable: true}
+        eating: {type: string, enum: [NORMAL, LESS, MORE, REFUSED]}
+        drinking: {type: string, enum: [NORMAL, LESS, MORE]}
+        excretion: {type: string, enum: [NORMAL, ABNORMAL]}
+        spirit: {type: string, enum: [GOOD, NORMAL, LOW]}
+        abnormalities:
+          type: array
+          description: 异常观察项
+          items:
+            type: object
+            properties:
+              code: {type: string}
+              label: {type: string}
+              description: {type: string}
+              suggestMedical: {type: boolean, description: 是否建议就医}
+        photos: {type: array, items: {type: string}}
+        summary: {type: string, nullable: true}
+        submittedAt: {type: string}
+    ReviewCreateDTO:
+      type: object
+      required: [scoreProfessional, scorePunctual, scoreCommunication, scoreCare]
+      properties:
+        scoreProfessional: {type: integer, minimum: 1, maximum: 5}
+        scorePunctual: {type: integer, minimum: 1, maximum: 5}
+        scoreCommunication: {type: integer, minimum: 1, maximum: 5}
+        scoreCare: {type: integer, minimum: 1, maximum: 5}
+        content: {type: string}
+        images: {type: array, items: {type: string}}
+        anonymous: {type: boolean, default: false}
+    ComplaintVO:
+      type: object
+      properties:
+        id: {type: integer, format: int64}
+        orderId: {type: integer, format: int64}
+        type: {type: string, enum: [PET_ABNORMAL, ENV_ABNORMAL, SERVICE_QUALITY, REFUND_DISPUTE, OTHER]}
+        status: {type: string, enum: [PENDING, PROCESSING, RESOLVED, CLOSED]}
+        title: {type: string}
+        createdAt: {type: string}
+    ComplaintDetailVO:
+      allOf:
+        - $ref: '#/components/schemas/ComplaintVO'
+        - type: object
+          properties:
+            description: {type: string}
+            evidenceUrls: {type: array, items: {type: string}}
+            handler: {type: string, nullable: true, description: 客服}
+            solution: {type: string, nullable: true}
+            advancePayment: {type: integer, nullable: true, description: 先行赔付金额（分）}
+            timeline:
+              type: array
+              items:
+                type: object
+                properties:
+                  time: {type: string}
+                  action: {type: string}
+                  operator: {type: string}
+    UserHomeVO:
+      type: object
+      description: 用户端首页聚合
+      properties:
+        services: {type: array, items: {$ref: '#/components/schemas/ServiceVO'}}
+        ongoingOrder: {$ref: '#/components/schemas/OrderVO'}
+        pets: {type: array, items: {$ref: '#/components/schemas/PetVO'}}
+        favoriteProviders: {type: array, items: {$ref: '#/components/schemas/ProviderBriefVO'}}
+    EntryCredentialLogVO:
+      type: object
+      description: 入户凭证查看记录
+      properties:
+        id: {type: integer, format: int64}
+        orderId: {type: integer, format: int64}
+        providerName: {type: string, description: 脱敏姓名}
+        action: {type: string, enum: [VIEW, UNLOCK]}
+        viewedAt: {type: string}
+        ip: {type: string, nullable: true}
+
+# ---------- 服务师端 ----------
+    ProviderApplicationDTO:
+      type: object
+      required: [realName, idCardNo, idCardFrontUrl, idCardBackUrl]
+      properties:
+        realName: {type: string}
+        idCardNo: {type: string}
+        idCardFrontUrl: {type: string}
+        idCardBackUrl: {type: string}
+        phone: {type: string}
+        city: {type: string}
+        serviceAreas: {type: array, items: {type: string}, description: 可服务区域}
+        serviceTypes: {type: array, items: {type: string, enum: [FEEDING, GROOMING, MEDICAL]}}
+        experiences: {type: string, description: 从业经历}
+        specialties: {type: array, items: {type: string}}
+    ProviderApplicationVO:
+      type: object
+      description: 入驻申请
+      properties:
+        id: {type: integer, format: int64}
+        providerId: {type: integer, format: int64}
+        realName: {type: string}
+        phone: {type: string}
+        city: {type: string}
+        serviceAreas: {type: array, items: {type: string}}
+        serviceTypes: {type: array, items: {type: string}}
+        status: {type: string, enum: [SUBMITTED, REVIEWING, APPROVED, REJECTED]}
+        submittedAt: {type: string}
+        reviewedAt: {type: string, nullable: true}
+        rejectReason: {type: string, nullable: true}
+    FaceVerifyVO:
+      type: object
+      description: 人脸核身发起结果
+      properties:
+        bizId: {type: string}
+        verifyUrl: {type: string, description: 核身跳转地址/小程序路径}
+        expireAt: {type: string}
+    CertificationStatusVO:
+      type: object
+      description: 五重认证状态项
+      properties:
+        type: {type: string, enum: [REAL_NAME, FACE, HEALTH_CERT, NO_CRIMINAL, QUALIFICATION, PLATFORM_TRAINING]}
+        label: {type: string, example: 健康证}
+        status: {type: string, enum: [NOT_SUBMITTED, PENDING, PASSED, REJECTED, EXPIRED]}
+        submittedAt: {type: string, nullable: true}
+        expireAt: {type: string, nullable: true}
+        remark: {type: string, nullable: true}
+    CertificationSubmitDTO:
+      type: object
+      required: [type]
+      properties:
+        type: {type: string, enum: [HEALTH_CERT, NO_CRIMINAL, QUALIFICATION]}
+        imageUrls: {type: array, items: {type: string}}
+        certNo: {type: string, nullable: true}
+        issuedAt: {type: string, format: date, nullable: true}
+        expireAt: {type: string, format: date, nullable: true}
+    TrainingCourseVO:
+      type: object
+      properties:
+        id: {type: integer, format: int64}
+        title: {type: string}
+        category: {type: string, enum: [FEEDING, GROOMING, MEDICAL, EMERGENCY]}
+        coverUrl: {type: string}
+        durationMinutes: {type: integer}
+        finished: {type: boolean}
+        examPassed: {type: boolean}
+    ExamResultVO:
+      type: object
+      properties:
+        courseId: {type: integer, format: int64}
+        score: {type: integer}
+        passed: {type: boolean, description: 是否达到 80 分通过线}
+        attemptCount: {type: integer}
+        passedAt: {type: string, nullable: true}
+    ProviderOrderItemVO:
+      type: object
+      description: 服务师端订单项
+      properties:
+        id: {type: integer, format: int64}
+        orderNo: {type: string}
+        status: {$ref: '#/components/schemas/OrderStatus'}
+        statusText: {type: string}
+        serviceName: {type: string}
+        petNames: {type: array, items: {type: string}}
+        addressBrief: {type: string, description: 仅展示到小区，服务时段内才展示门牌}
+        date: {type: string, format: date}
+        timeSlot: {type: string}
+        distanceKm: {type: number, format: double, nullable: true}
+        amount: {type: integer, description: 本单预计收入（分）}
+        responseDeadline: {type: string, nullable: true, description: 指派单响应截止时间（15 分钟）}
+    ScheduleSettingVO:
+      type: object
+      properties:
+        weekdays: {type: array, items: {type: integer, minimum: 1, maximum: 7}, description: 可接单星期}
+        timeRanges:
+          type: array
+          items:
+            type: object
+            properties:
+              start: {type: string, example: '09:00'}
+              end: {type: string, example: '18:00'}
+        serviceAreas: {type: array, items: {type: string}}
+        serviceTypes: {type: array, items: {type: string, enum: [FEEDING, GROOMING, MEDICAL]}}
+        acceptMode: {type: string, enum: [AUTO, MANUAL], description: 接单模式}
+    ScheduleSettingDTO:
+      type: object
+      properties:
+        weekdays: {type: array, items: {type: integer}}
+        timeRanges:
+          type: array
+          items:
+            type: object
+            properties:
+              start: {type: string}
+              end: {type: string}
+        serviceAreas: {type: array, items: {type: string}}
+        serviceTypes: {type: array, items: {type: string}}
+        acceptMode: {type: string, enum: [AUTO, MANUAL]}
+    CheckinVO:
+      type: object
+      description: 到达打卡结果
+      properties:
+        recordId: {type: integer, format: int64}
+        checkinAt: {type: string}
+        longitude: {type: number, format: double}
+        latitude: {type: number, format: double}
+        distanceMeters: {type: integer, description: 与地址坐标偏差（米）}
+        deviationAlert: {type: boolean, description: 偏差是否超过 500m 触发告警}
+    SopChecklistVO:
+      type: object
+      description: SOP 执行清单
+      properties:
+        serviceType: {type: string}
+        items:
+          type: array
+          items:
+            type: object
+            properties:
+              code: {type: string}
+              title: {type: string}
+              required: {type: boolean}
+              needPhoto: {type: boolean}
+              done: {type: boolean}
+        feedingInstruction: {type: object, nullable: true, description: 从宠物档案自动带入的喂养指令}
+    ServiceReportSubmitDTO:
+      type: object
+      required: [eating, drinking, excretion, spirit]
+      properties:
+        dayId: {type: integer, format: int64, nullable: true}
+        eating: {type: string, enum: [NORMAL, LESS, MORE, REFUSED]}
+        drinking: {type: string, enum: [NORMAL, LESS, MORE]}
+        excretion: {type: string, enum: [NORMAL, ABNORMAL]}
+        spirit: {type: string, enum: [GOOD, NORMAL, LOW]}
+        abnormalities:
+          type: array
+          items:
+            type: object
+            properties:
+              code: {type: string}
+              description: {type: string}
+        photoUrls: {type: array, items: {type: string}}
+        summary: {type: string}
+    EntryCredentialVO:
+      type: object
+      description: 入户凭证，仅服务时段内可见且查看留痕
+      properties:
+        entryMode: {type: string}
+        secret: {type: string, description: 明文凭证，仅本次可见}
+        expireAt: {type: string, description: 服务结束即失效}
+    WalletVO:
+      type: object
+      properties:
+        balance: {type: integer, description: 可提现余额（分）}
+        pendingSettlement: {type: integer, description: 待结算金额（分）}
+        frozenDeposit: {type: integer, description: 冻结保证金（分）}
+        totalIncome: {type: integer, description: 累计收入（分）}
+    SettlementVO:
+      type: object
+      description: 结算明细
+      properties:
+        id: {type: integer, format: int64}
+        orderId: {type: integer, format: int64}
+        orderNo: {type: string}
+        orderAmount: {type: integer, description: 订单金额（分）}
+        platformFee: {type: integer, description: 平台服务费（分）}
+        netAmount: {type: integer, description: 实结金额（分）}
+        status: {type: string, enum: [PENDING, SETTLED, FROZEN]}
+        settledAt: {type: string, nullable: true, description: T+1 结算到账时间}
+    WithdrawalVO:
+      type: object
+      properties:
+        id: {type: integer, format: int64}
+        amount: {type: integer, description: 提现金额（分）}
+        bankCardMasked: {type: string}
+        status: {type: string, enum: [APPLIED, APPROVED, PAID, REJECTED]}
+        appliedAt: {type: string}
+        paidAt: {type: string, nullable: true}
+        rejectReason: {type: string, nullable: true}
+    BankCardVO:
+      type: object
+      description: 服务师银行卡（脱敏展示）
+      properties:
+        id: {type: integer, format: int64}
+        holderName: {type: string}
+        bankName: {type: string}
+        cardNoMasked: {type: string, example: 尾号 8888}
+        isDefault: {type: boolean}
+    BankCardSaveDTO:
+      type: object
+      required: [holderName, bankName, cardNo, phone]
+      properties:
+        holderName: {type: string, description: 持卡人}
+        bankName: {type: string}
+        cardNo: {type: string, description: 卡号，服务端加密存储}
+        phone: {type: string, description: 银行预留手机号}
+        isDefault: {type: boolean}
+
+    # ---------- 管理后台 ----------
+    AdminLoginVO:
+      type: object
+      properties:
+        token: {type: string}
+        userId: {type: integer, format: int64}
+        userName: {type: string}
+        roleCode: {type: string}
+    AdminProfileVO:
+      type: object
+      properties:
+        id: {type: integer, format: int64}
+        userName: {type: string}
+        realName: {type: string}
+        roleCode: {type: string}
+        permissions: {type: array, items: {type: string}}
+    AdminStaffVO:
+      type: object
+      description: 后台员工（工单指派选择用）
+      properties:
+        id: {type: integer, format: int64}
+        userName: {type: string}
+        realName: {type: string}
+        roleCode: {type: string}
+        roleName: {type: string}
+    AdminOrderVO:
+      type: object
+      properties:
+        id: {type: integer, format: int64}
+        orderNo: {type: string}
+        status: {$ref: '#/components/schemas/OrderStatus'}
+        statusText: {type: string}
+        userName: {type: string}
+        providerName: {type: string, nullable: true}
+        serviceName: {type: string}
+        date: {type: string, format: date}
+        timeSlot: {type: string}
+        amount: {type: integer, description: 金额（分）}
+        city: {type: string}
+        createdAt: {type: string}
+        alert: {type: boolean, description: 是否存在异常告警}
+    AdminOrderDetailVO:
+      allOf:
+        - $ref: '#/components/schemas/AdminOrderVO'
+        - type: object
+          properties:
+            priceDetail:
+              type: object
+              description: 金额明细
+              properties:
+                serviceAmount: {type: integer}
+                discountAmount: {type: integer}
+                payAmount: {type: integer}
+                platformFee: {type: integer}
+                refundAmount: {type: integer}
+            dispatchHistory:
+              type: array
+              items:
+                type: object
+                properties:
+                  providerName: {type: string}
+                  action: {type: string, enum: [DISPATCH, ACCEPT, REJECT, REASSIGN]}
+                  time: {type: string}
+                  remark: {type: string, nullable: true}
+            records: {type: array, items: {$ref: '#/components/schemas/ServiceRecordVO'}}
+            report: {$ref: '#/components/schemas/ServiceReportVO'}
+            complaints: {type: array, items: {$ref: '#/components/schemas/ComplaintVO'}}
+    OrderAlertVO:
+      type: object
+      description: 异常订单告警
+      properties:
+        id: {type: integer, format: int64}
+        orderId: {type: integer, format: int64}
+        orderNo: {type: string}
+        alertType: {type: string, enum: [TIMEOUT_NO_ACCEPT, CHECKIN_DEVIATION, PROVIDER_EXCEPTION, USER_COMPLAINT, PAYMENT_ABNORMAL]}
+        alertText: {type: string}
+        level: {type: string, enum: [LOW, MEDIUM, HIGH]}
+        createdAt: {type: string}
+        handled: {type: boolean}
+    AdminProviderVO:
+      type: object
+      properties:
+        id: {type: integer, format: int64}
+        realName: {type: string}
+        phone: {type: string}
+        city: {type: string}
+        status: {type: string, enum: [PENDING, ACTIVE, SUSPENDED, BANNED, QUIT]}
+        certificationPassed: {type: integer, description: 已通过认证项数}
+        level: {type: string, nullable: true}
+        rating: {type: number, format: double}
+        serviceCount: {type: integer}
+        depositFrozen: {type: integer, description: 冻结保证金（分）}
+        createdAt: {type: string}
+    AdminProviderDetailVO:
+      allOf:
+        - $ref: '#/components/schemas/AdminProviderVO'
+        - type: object
+          properties:
+            certifications: {type: array, items: {$ref: '#/components/schemas/CertificationStatusVO'}}
+            trainingRecords: {type: array, items: {$ref: '#/components/schemas/TrainingCourseVO'}}
+            agreements:
+              type: array
+              items:
+                type: object
+                properties:
+                  type: {type: string}
+                  signedAt: {type: string}
+                  fileUrl: {type: string}
+            punishments:
+              type: array
+              items:
+                type: object
+                properties:
+                  type: {type: string, enum: [WARNING, FINE, SUSPEND, BAN, REWARD]}
+                  reason: {type: string}
+                  time: {type: string}
+                  amount: {type: integer, nullable: true, description: 罚款金额（分）}
+    DepositLedgerVO:
+      type: object
+      description: 保证金台账
+      properties:
+        id: {type: integer, format: int64}
+        providerId: {type: integer, format: int64}
+        providerName: {type: string}
+        type: {type: string, enum: [PAY, FREEZE, REFUND, DEDUCT]}
+        amount: {type: integer, description: 金额（分）}
+        balanceAfter: {type: integer, description: 变动后余额（分）}
+        orderId: {type: integer, format: int64, nullable: true}
+        remark: {type: string, nullable: true}
+        createdAt: {type: string}
+    AdminUserVO:
+      type: object
+      properties:
+        id: {type: integer, format: int64}
+        nickname: {type: string}
+        phone: {type: string, description: 脱敏手机号}
+        city: {type: string}
+        orderCount: {type: integer}
+        complaintMarked: {type: boolean}
+        blacklisted: {type: boolean}
+        createdAt: {type: string}
+    AdminUserDetailVO:
+      allOf:
+        - $ref: '#/components/schemas/AdminUserVO'
+        - type: object
+          properties:
+            pets: {type: array, items: {$ref: '#/components/schemas/PetVO'}}
+            addresses: {type: array, items: {$ref: '#/components/schemas/AddressVO'}}
+            orders: {type: array, items: {$ref: '#/components/schemas/OrderVO'}}
+            complaintCount: {type: integer}
+    ReconciliationVO:
+      type: object
+      description: 微信支付对账
+      properties:
+        date: {type: string, format: date}
+        payAmount: {type: integer, description: 支付流水（分）}
+        refundAmount: {type: integer, description: 退款流水（分）}
+        platformFee: {type: integer, description: 平台服务费（分）}
+        providerSettlement: {type: integer, description: 服务师结算（分）}
+        diffAmount: {type: integer, description: 与微信账单差异（分）}
+        status: {type: string, enum: [MATCHED, DIFF, PENDING]}
+    SettlementRuleVO:
+      type: object
+      description: 分账规则
+      properties:
+        id: {type: integer, format: int64}
+        city: {type: string, nullable: true, description: 为空表示全局规则}
+        commissionRate: {type: number, format: double, description: 抽佣比例，如 0.15 表示 15%}
+        settleCycle: {type: string, example: T+1}
+        minWithdrawAmount: {type: integer, description: 最低提现金额（分）}
+        updatedAt: {type: string}
+    SettlementRuleDTO:
+      type: object
+      properties:
+        city: {type: string}
+        commissionRate: {type: number, format: double}
+        settleCycle: {type: string}
+        minWithdrawAmount: {type: integer}
+    AdminRoleVO:
+      type: object
+      properties:
+        id: {type: integer, format: int64}
+        code: {type: string, example: CUSTOMER_SERVICE}
+        name: {type: string, example: 客服}
+        permissions: {type: array, items: {type: string}}
+        userCount: {type: integer}
+    AuditLogVO:
+      type: object
+      description: 敏感操作审计日志
+      properties:
+        id: {type: integer, format: int64}
+        operatorId: {type: integer, format: int64}
+        operatorName: {type: string}
+        roleCode: {type: string}
+        action: {type: string, description: 操作编码，如 VIEW_ENTRY_CREDENTIAL}
+        target: {type: string, description: 操作对象}
+        detail: {type: string, nullable: true}
+        ip: {type: string, nullable: true}
+        createdAt: {type: string}

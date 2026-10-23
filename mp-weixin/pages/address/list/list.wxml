@@ -1,0 +1,18 @@
+<view class="page" style="padding-bottom: 180rpx">
+  <view wx:if="{{addresses.length === 0}}" class="empty">暂无地址，添加一个吧～</view>
+  <view wx:for="{{addresses}}" wx:key="id" class="card" data-id="{{item.id}}" bindtap="edit">
+    <view class="row between" style="margin-bottom:10rpx">
+      <view class="title">{{item.contactName}} <text class="muted" style="font-weight:400">{{item.contactPhone}}</text></view>
+      <view wx:if="{{item.isDefault === 1}}" class="tag">默认</view>
+    </view>
+    <view style="margin-bottom:10rpx">{{item.fullText}}</view>
+    <view class="row">
+      <view class="tag tag-blue">{{item.entryModeText}}</view>
+    </view>
+    <view class="row" style="margin-top:20rpx;justify-content:flex-end">
+      <view class="btn btn-grey btn-sm" data-id="{{item.id}}" data-addr="{{item.fullText}}" catchtap="del">删除</view>
+    </view>
+  </view>
+
+  <view class="btn btn-primary btn-bottom" bindtap="add">+ 添加地址</view>
+</view>

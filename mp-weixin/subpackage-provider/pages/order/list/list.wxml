@@ -1,0 +1,32 @@
+<view class="page" style="padding-top:0">
+  <scroll-view scroll-x class="tabs" enhanced show-scrollbar="{{false}}">
+    <view
+      wx:for="{{tabs}}"
+      wx:key="label"
+      class="tab {{tabIndex === index ? 'tab-active' : ''}}"
+      data-i="{{index}}"
+      bindtap="switchTab"
+    >{{item.label}}</view>
+  </scroll-view>
+
+  <view wx:if="{{orders.length === 0}}" class="empty">暂无订单</view>
+
+  <view
+    wx:for="{{orders}}"
+    wx:key="id"
+    class="card"
+    data-id="{{item.id}}"
+    bindtap="goDetail"
+  >
+    <view class="row between" style="margin-bottom:12rpx">
+      <view class="muted">No. {{item.orderNo}}</view>
+      <view class="status-{{item.status}}" style="font-size:26rpx">{{item.statusText}}</view>
+    </view>
+    <view class="row between">
+      <view class="title">{{item.serviceName}}</view>
+      <view class="price">{{item.payAmountYuan}}</view>
+    </view>
+    <view class="muted" style="margin-top:8rpx">{{item.startDate}} 起 · 共{{item.days}}天 · {{item.timeSlot}}</view>
+    <view class="muted" style="margin-top:8rpx">{{item.addressText}}</view>
+  </view>
+</view>

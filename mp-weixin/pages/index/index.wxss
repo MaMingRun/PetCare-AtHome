@@ -1,0 +1,30 @@
+.hero {
+  padding: 32rpx 8rpx 24rpx;
+}
+.hero-title { font-size: 48rpx; font-weight: 700; }
+.hero-sub { color: var(--text-sub); font-size: 26rpx; margin-top: 8rpx; }
+
+.cats { white-space: nowrap; margin-bottom: 20rpx; }
+.cat {
+  display: inline-block;
+  padding: 12rpx 32rpx;
+  margin-right: 16rpx;
+  border-radius: 999rpx;
+  background: #fff;
+  color: var(--text-sub);
+  font-size: 26rpx;
+}
+.cat-active { background: var(--brand); color: #fff; }
+
+.svc { display: flex; }
+.svc-cover {
+  width: 120rpx; height: 120rpx;
+  border-radius: 16rpx;
+  background: var(--brand-light);
+  color: var(--brand);
+  font-size: 48rpx;
+  font-weight: 600;
+  display: flex; align-items: center; justify-content: center;
+  margin-right: 24rpx;
+  flex-shrink: 0;
+}

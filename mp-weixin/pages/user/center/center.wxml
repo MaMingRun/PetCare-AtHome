@@ -1,0 +1,41 @@
+<view class="page">
+  <!-- 用户卡片 -->
+  <view class="card user-card">
+    <view class="avatar">{{logged ? '宠' : '?'}}</view>
+    <view class="col" style="flex:1">
+      <view class="title" wx:if="{{logged}}">{{nickname}}</view>
+      <view class="title" wx:else>未登录</view>
+      <view class="muted" style="margin-top:6rpx">{{logged ? '欢迎使用宠物到家' : '登录后可下单预约服务'}}</view>
+    </view>
+    <view wx:if="{{logged}}" class="btn btn-grey btn-sm" bindtap="logout">退出</view>
+  </view>
+
+  <!-- 开发登录区 -->
+  <view class="card" wx:if="{{!logged}}">
+    <view class="field">
+      <view class="field-label">开发登录标识（dev 环境任意固定字符串，如 dev-user-1）</view>
+      <input class="input" placeholder="留空默认 dev-user-1" value="{{devCode}}" bindinput="onCodeInput" />
+    </view>
+    <view class="btn btn-primary" bindtap="login">微信登录（Dev）</view>
+  </view>
+
+  <!-- 功能入口 -->
+  <view class="card">
+    <view class="menu-item" bindtap="goOrders">
+      <view>我的订单</view><view class="muted">›</view>
+    </view>
+    <view class="menu-item" bindtap="goAddress">
+      <view>我的地址</view><view class="muted">›</view>
+    </view>
+    <view class="menu-item" bindtap="goPets">
+      <view>我的宠物</view><view class="muted">›</view>
+    </view>
+  </view>
+
+  <!-- 服务师端入口 -->
+  <view class="card">
+    <view class="menu-item" bindtap="goProvider">
+      <view>服务师工作台</view><view class="muted">›</view>
+    </view>
+  </view>
+</view>

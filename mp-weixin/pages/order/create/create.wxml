@@ -1,0 +1,96 @@
+<view class="page" style="padding-bottom: 200rpx">
+
+  <!-- 地址 -->
+  <view class="card">
+    <view class="title" style="margin-bottom:16rpx">服务地址</view>
+    <view wx:if="{{addresses.length === 0}}" class="muted">暂无地址，请先在管理后台或数据库中添加</view>
+    <view
+      wx:for="{{addresses}}"
+      wx:key="id"
+      class="addr {{addressIndex === index ? 'addr-active' : ''}}"
+      data-i="{{index}}"
+      bindtap="pickAddress"
+    >
+      <view class="row between">
+        <view>{{item.contactName}} {{item.contactPhone}}</view>
+        <view class="tag tag-blue">{{item.entryModeText}}</view>
+      </view>
+      <view class="muted" style="margin-top:8rpx">{{item.fullText}}</view>
+    </view>
+  </view>
+
+  <!-- 宠物 -->
+  <view class="card">
+    <view class="title" style="margin-bottom:16rpx">选择宠物（可多选）</view>
+    <view wx:if="{{pets.length === 0}}" class="muted">暂无宠物档案，请先添加</view>
+    <view class="row" style="flex-wrap:wrap">
+      <view
+        wx:for="{{pets}}"
+        wx:key="id"
+        class="pet {{petChecked[item.id] ? 'pet-active' : ''}}"
+        data-id="{{item.id}}"
+        bindtap="togglePet"
+      >{{item.name}} · {{item.speciesText}}</view>
+    </view>
+  </view>
+
+  <!-- 预约时间 -->
+  <view class="card">
+    <view class="title" style="margin-bottom:16rpx">预约时间</view>
+    <view class="row between" style="margin-bottom:20rpx">
+      <view class="muted">开始日期</view>
+      <picker mode="date" value="{{startDate}}" bindchange="pickDate">
+        <view class="picker-value">{{startDate}} ›</view>
+      </picker>
+    </view>
+    <view class="row between" style="margin-bottom:20rpx">
+      <view class="muted">连续天数</view>
+      <view class="row">
+        <view class="stepper" data-d="-1" bindtap="changeDays">−</view>
+        <view style="width:80rpx;text-align:center">{{days}} 天</view>
+        <view class="stepper" data-d="1" bindtap="changeDays">＋</view>
+      </view>
+    </view>
+    <view class="muted" style="margin-bottom:12rpx">服务时段</view>
+    <view class="row" style="flex-wrap:wrap">
+      <view
+        wx:for="{{timeSlots}}"
+        wx:key="*this"
+        class="slot {{slotIndex === index ? 'slot-active' : ''}}"
+        data-i="{{index}}"
+        bindtap="pickSlot"
+      >{{item}}</view>
+    </view>
+  </view>
+
+  <!-- 距离与备注 -->
+  <view class="card">
+    <view class="field">
+      <view class="field-label">距离（公里，用于远程加价试算）</view>
+      <input class="input" type="digit" value="{{distanceKm}}" bindinput="onDistanceInput" />
+    </view>
+    <view class="field" style="margin-bottom:0">
+      <view class="field-label">备注</view>
+      <textarea class="textarea" placeholder="宠物的注意事项、特殊需求等" value="{{remark}}" bindinput="onRemarkInput" />
+    </view>
+  </view>
+
+  <!-- 试算结果 -->
+  <view class="card" wx:if="{{preview}}">
+    <view class="title" style="margin-bottom:16rpx">费用明细</view>
+    <view wx:for="{{preview.itemList}}" wx:key="label" class="row between" style="margin-bottom:12rpx">
+      <view class="muted">{{item.label}}</view>
+      <view class="price">{{item.amountYuan}}</view>
+    </view>
+    <view class="divider"></view>
+    <view class="row between">
+      <view class="title">合计</view>
+      <view class="price" style="font-size:36rpx">{{preview.totalYuan}}</view>
+    </view>
+  </view>
+
+  <!-- 提交 -->
+  <view class="btn btn-primary btn-bottom {{submitting ? 'btn-disabled' : ''}}" bindtap="submit">
+    提交订单{{preview ? ' · ¥' + preview.totalYuan : ''}}
+  </view>
+</view>

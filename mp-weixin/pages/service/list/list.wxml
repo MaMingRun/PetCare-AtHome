@@ -1,0 +1,22 @@
+<view class="page">
+  <view wx:if="{{services.length === 0}}" class="empty">该分类下暂无服务</view>
+  <view
+    wx:for="{{services}}"
+    wx:key="id"
+    class="card svc"
+    data-id="{{item.id}}"
+    bindtap="goDetail"
+  >
+    <view class="svc-cover">{{item.firstChar}}</view>
+    <view class="col" style="flex:1">
+      <view class="row between">
+        <view class="title">{{item.name}}</view>
+        <view class="price">{{item.priceYuan}}</view>
+      </view>
+      <view class="muted" style="margin:8rpx 0">{{item.category}} · {{item.durationMinutes}}分钟/次</view>
+      <view>
+        <text wx:for="{{item.tagList}}" wx:key="*this" class="tag">{{item}}</text>
+      </view>
+    </view>
+  </view>
+</view>

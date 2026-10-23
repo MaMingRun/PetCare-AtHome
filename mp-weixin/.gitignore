@@ -1,0 +1,19 @@
+# 微信小程序
+project.private.config.json
+node_modules/
+dist/
+unpackage/
+.hbuilderx/
+
+# 本地调试产物
+miniprogram_npm/
+npm/
+
+# 系统
+.DS_Store
+Thumbs.db
+
+# IDE
+.idea/
+.vscode/
+*.iml

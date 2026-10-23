@@ -1,0 +1,8 @@
+.picker-value {
+  background: #f6f7f9;
+  border-radius: 12rpx;
+  padding: 20rpx 24rpx;
+  color: var(--text-main);
+  font-size: 28rpx;
+  line-height: 44rpx;
+}

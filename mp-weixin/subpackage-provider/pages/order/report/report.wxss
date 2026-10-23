@@ -1,0 +1,8 @@
+.opt {
+  padding: 14rpx 32rpx;
+  border: 2rpx solid var(--line);
+  border-radius: 999rpx;
+  margin: 0 16rpx 16rpx 0;
+  font-size: 26rpx;
+}
+.opt-active { border-color: var(--brand); background: var(--brand-light); color: var(--brand); }

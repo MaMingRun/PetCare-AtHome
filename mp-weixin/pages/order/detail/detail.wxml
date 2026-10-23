@@ -1,0 +1,95 @@
+<view class="page" wx:if="{{order}}" style="padding-bottom: 200rpx">
+
+  <!-- 状态头 -->
+  <view class="status-banner status-{{order.status}}">
+    {{order.statusText}}
+    <view class="muted" wx:if="{{order.status === 'PENDING_PAY'}}" style="color:#fff;opacity:.85;font-size:24rpx;margin-top:8rpx">
+      请在 {{order.payExpireAtText}} 前完成支付
+    </view>
+  </view>
+
+  <!-- 服务信息 -->
+  <view class="card">
+    <view class="row between" style="margin-bottom:12rpx">
+      <view class="title">{{order.serviceName}}</view>
+      <view class="price" style="font-size:34rpx">{{order.payAmountYuan}}</view>
+    </view>
+    <view class="muted">订单号：{{order.orderNo}}</view>
+    <view class="muted" style="margin-top:6rpx">下单时间：{{order.createdAtText}}</view>
+    <view class="muted" style="margin-top:6rpx" wx:if="{{order.cancelTimeText}}">取消时间：{{order.cancelTimeText}}（{{order.cancelRemark}}）</view>
+  </view>
+
+  <!-- 排期 -->
+  <view class="card">
+    <view class="title" style="margin-bottom:16rpx">服务排期（共{{order.days}}天）</view>
+    <view wx:for="{{order.dayViewList}}" wx:key="id" class="row between" style="margin-bottom:12rpx">
+      <view>{{item.date}} {{item.slotBegin}}-{{item.slotEnd}}</view>
+      <view class="tag {{item.status === 'DONE' ? 'tag-green' : (item.status === 'SERVING' ? 'tag-blue' : 'tag-grey')}}">{{item.dayStatusText}}</view>
+    </view>
+  </view>
+
+  <!-- 地址与宠物 -->
+  <view class="card">
+    <view class="title" style="margin-bottom:16rpx">服务信息</view>
+    <view class="row" style="margin-bottom:12rpx">
+      <view class="muted" style="width:140rpx">联系人</view>
+      <view>{{order.contactName}} {{order.contactPhone}}</view>
+    </view>
+    <view class="row" style="margin-bottom:12rpx">
+      <view class="muted" style="width:140rpx">地址</view>
+      <view style="flex:1">{{order.addressText}}</view>
+    </view>
+    <view class="row" style="margin-bottom:12rpx">
+      <view class="muted" style="width:140rpx">入户方式</view>
+      <view>{{order.entryModeText}}</view>
+    </view>
+    <view class="row" style="margin-bottom:12rpx" wx:if="{{order.petText}}">
+      <view class="muted" style="width:140rpx">宠物</view>
+      <view>{{order.petText}}</view>
+    </view>
+    <view class="row" wx:if="{{order.remark}}">
+      <view class="muted" style="width:140rpx">备注</view>
+      <view style="flex:1">{{order.remark}}</view>
+    </view>
+  </view>
+
+  <!-- 金额 -->
+  <view class="card">
+    <view class="title" style="margin-bottom:16rpx">费用明细</view>
+    <view class="row between" style="margin-bottom:12rpx">
+      <view class="muted">基础服务费</view><view class="price">{{order.baseYuan}}</view>
+    </view>
+    <view class="row between" style="margin-bottom:12rpx">
+      <view class="muted">附加费</view><view class="price">{{order.extraYuan}}</view>
+    </view>
+    <view class="row between" style="margin-bottom:12rpx">
+      <view class="muted">优惠</view><view class="price">-{{order.discountYuan}}</view>
+    </view>
+    <view class="divider"></view>
+    <view class="row between">
+      <view class="title">实付</view><view class="price" style="font-size:34rpx">{{order.payAmountYuan}}</view>
+    </view>
+  </view>
+
+  <!-- 凭证操作日志（透明可查） -->
+  <view class="card">
+    <view class="row between" bindtap="toggleLogs">
+      <view class="title">入户凭证操作日志</view>
+      <view class="muted">{{showLogs ? '收起 ▲' : '展开 ▼'}}</view>
+    </view>
+    <view wx:if="{{showLogs}}" style="margin-top:16rpx">
+      <view wx:if="{{credentialLogs.length === 0}}" class="muted">暂无操作记录</view>
+      <view wx:for="{{credentialLogs}}" wx:key="id" class="muted" style="margin-bottom:10rpx">
+        {{item.createdAtText}} · {{item.actionText}} · 服务师#{{item.providerId}} · IP {{item.ip}}
+      </view>
+    </view>
+  </view>
+
+  <!-- 底部操作 -->
+  <view class="row btn-bar" wx:if="{{order.status === 'PENDING_PAY' || order.status === 'PENDING_CONFIRM' || order.status === 'SETTLING'}}">
+    <view wx:if="{{order.status === 'PENDING_PAY'}}" class="btn btn-grey" style="flex:1;margin-right:20rpx" bindtap="cancel">取消订单</view>
+    <view wx:if="{{order.status === 'PENDING_PAY'}}" class="btn btn-primary" style="flex:2" bindtap="pay">去支付</view>
+    <view wx:if="{{order.status === 'PENDING_CONFIRM'}}" class="btn btn-primary" style="flex:1" bindtap="confirm">确认收货</view>
+    <view wx:if="{{order.status === 'SETTLING'}}" class="btn btn-primary" style="flex:1" bindtap="goReview">评价服务</view>
+  </view>
+</view>

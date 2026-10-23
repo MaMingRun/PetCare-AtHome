@@ -1,0 +1,24 @@
+.status-banner {
+  border-radius: 16rpx;
+  padding: 40rpx 28rpx;
+  margin-bottom: 24rpx;
+  font-size: 36rpx;
+  font-weight: 600;
+  color: #fff;
+  background: linear-gradient(135deg, #1989fa, #6db7ff);
+}
+.status-banner.status-PENDING_CONFIRM,
+.status-banner.status-SETTLING {
+  background: linear-gradient(135deg, #07c160, #5fdd9d);
+}
+.status-banner.status-CANCELLED,
+.status-banner.status-REVIEWED,
+.status-banner.status-FINISHED {
+  background: linear-gradient(135deg, #9aa0a6, #c8c9cc);
+}
+
+.btn-bar {
+  position: fixed;
+  left: 24rpx; right: 24rpx; bottom: 40rpx;
+}
+.btn-bar .btn { padding: 26rpx 0; font-size: 32rpx; }

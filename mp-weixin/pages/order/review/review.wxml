@@ -1,0 +1,35 @@
+<view class="page">
+  <!-- 四项评分 -->
+  <view class="card">
+    <view wx:for="{{dims}}" wx:key="key" class="row between" style="margin-bottom:24rpx">
+      <view>{{item.label}}</view>
+      <view class="row">
+        <view
+          wx:for="{{[1, 2, 3, 4, 5]}}"
+          wx:for-item="star"
+          wx:key="*this"
+          class="star {{scores[item.key] >= star ? 'star-on' : ''}}"
+          data-key="{{item.key}}"
+          data-v="{{star}}"
+          bindtap="setScore"
+        >★</view>
+      </view>
+    </view>
+  </view>
+
+  <!-- 文字评价 -->
+  <view class="card">
+    <view class="field" style="margin-bottom:0">
+      <view class="field-label">服务感受</view>
+      <textarea class="textarea" placeholder="分享服务师的表现和宠物的状态～" value="{{content}}" bindinput="onContentInput" />
+    </view>
+  </view>
+
+  <!-- 匿名 -->
+  <view class="card row between">
+    <view>匿名评价</view>
+    <switch checked="{{anonymous === 1}}" color="#ff8c42" bindchange="toggleAnonymous" />
+  </view>
+
+  <view class="btn btn-primary btn-bottom {{submitting ? 'btn-disabled' : ''}}" bindtap="submit">提交评价</view>
+</view>

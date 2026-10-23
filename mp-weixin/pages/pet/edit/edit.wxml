@@ -1,0 +1,55 @@
+<view class="page" style="padding-bottom: 180rpx">
+  <view class="card">
+    <view class="field">
+      <view class="field-label">名字 *</view>
+      <input class="input" placeholder="给宠物起个名字" value="{{form.name}}" data-key="name" bindinput="onInput" />
+    </view>
+    <view class="field">
+      <view class="field-label">物种</view>
+      <picker range="{{speciesList}}" value="{{speciesIndex}}" bindchange="onSpecies">
+        <view class="picker-value">{{speciesList[speciesIndex]}} ›</view>
+      </picker>
+    </view>
+    <view class="field">
+      <view class="field-label">品种</view>
+      <input class="input" placeholder="如 布偶、金毛" value="{{form.breed}}" data-key="breed" bindinput="onInput" />
+    </view>
+    <view class="field">
+      <view class="field-label">性别</view>
+      <picker range="{{genderList}}" value="{{genderIndex}}" bindchange="onGender">
+        <view class="picker-value">{{genderList[genderIndex]}} ›</view>
+      </picker>
+    </view>
+    <view class="field">
+      <view class="field-label">生日</view>
+      <picker mode="date" value="{{form.birthday}}" bindchange="onBirthday">
+        <view class="picker-value">{{form.birthday || '请选择'}} ›</view>
+      </picker>
+    </view>
+    <view class="field">
+      <view class="field-label">体重（kg）</view>
+      <input class="input" type="digit" placeholder="如 4.5" value="{{form.weightKg}}" data-key="weightKg" bindinput="onInput" />
+    </view>
+    <view class="field row between" style="align-items:center">
+      <view class="field-label" style="margin-bottom:0">已绝育</view>
+      <switch checked="{{form.sterilized === 1}}" color="#ff8c42" bindchange="onSterilized" />
+    </view>
+  </view>
+
+  <view class="card">
+    <view class="field">
+      <view class="field-label">过敏 / 禁忌</view>
+      <textarea class="textarea" placeholder="对什么食物或药物过敏" value="{{form.allergies}}" data-key="allergies" bindinput="onInput" />
+    </view>
+    <view class="field">
+      <view class="field-label">慢病 / 用药</view>
+      <textarea class="textarea" placeholder="基础病、需要定时喂药的说明" value="{{form.chronicDisease}}" data-key="chronicDisease" bindinput="onInput" />
+    </view>
+    <view class="field" style="margin-bottom:0">
+      <view class="field-label">喂养指令</view>
+      <textarea class="textarea" placeholder="早晚各喂一次、不能喂牛奶 等" value="{{form.feedingInstruction}}" data-key="feedingInstruction" bindinput="onInput" />
+    </view>
+  </view>
+
+  <view class="btn btn-primary btn-bottom" bindtap="submit">{{isEdit ? '保存修改' : '添加宠物'}}</view>
+</view>

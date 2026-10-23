@@ -1,0 +1,91 @@
+/* ===== 全局设计变量 ===== */
+page {
+  --brand: #ff8c42;
+  --brand-light: #fff1e6;
+  --text-main: #1f2329;
+  --text-sub: #8a8f99;
+  --line: #eef0f3;
+  --bg: #f6f7f9;
+  --green: #07c160;
+  --red: #ee0a24;
+  --blue: #1989fa;
+  background: var(--bg);
+  color: var(--text-main);
+  font-size: 28rpx;
+  font-family: -apple-system, "PingFang SC", "Helvetica Neue", sans-serif;
+}
+
+/* ===== 通用布局 ===== */
+.page { min-height: 100vh; padding: 24rpx; box-sizing: border-box; }
+.card {
+  background: #fff;
+  border-radius: 16rpx;
+  padding: 28rpx;
+  margin-bottom: 24rpx;
+}
+.row { display: flex; align-items: center; }
+.between { justify-content: space-between; }
+.col { display: flex; flex-direction: column; }
+.muted { color: var(--text-sub); font-size: 24rpx; }
+.title { font-size: 32rpx; font-weight: 600; }
+.price { color: var(--brand); font-weight: 600; }
+.price::before { content: "¥"; font-size: 0.75em; margin-right: 2rpx; }
+
+/* ===== 按钮 ===== */
+.btn {
+  border-radius: 999rpx;
+  text-align: center;
+  padding: 20rpx 0;
+  font-size: 28rpx;
+  line-height: 1.2;
+}
+.btn-primary { background: var(--brand); color: #fff; }
+.btn-plain { background: #fff; color: var(--brand); border: 2rpx solid var(--brand); }
+.btn-grey { background: #f2f3f5; color: var(--text-sub); }
+.btn-sm { padding: 10rpx 32rpx; font-size: 26rpx; }
+.btn-disabled { background: #f2f3f5; color: #c8c9cc; }
+.btn-bottom {
+  position: fixed; left: 24rpx; right: 24rpx; bottom: 40rpx;
+  padding: 26rpx 0; font-size: 32rpx;
+}
+
+/* ===== 标签 ===== */
+.tag {
+  display: inline-block;
+  font-size: 22rpx;
+  padding: 4rpx 16rpx;
+  border-radius: 8rpx;
+  background: var(--brand-light);
+  color: var(--brand);
+  margin-right: 12rpx;
+}
+.tag-green { background: #e8f9ef; color: var(--green); }
+.tag-blue { background: #e8f3ff; color: var(--blue); }
+.tag-grey { background: #f2f3f5; color: var(--text-sub); }
+.tag-red { background: #ffece8; color: var(--red); }
+
+/* ===== 状态徽标 ===== */
+.status-PENDING_PAY, .status-PENDING_ACCEPT { color: var(--brand); }
+.status-ACCEPTED, .status-DEPARTED, .status-ARRIVED, .status-SERVING { color: var(--blue); }
+.status-PENDING_CONFIRM, .status-SETTLING { color: var(--green); }
+.status-CANCELLED { color: var(--text-sub); }
+.status-REVIEWED, .status-FINISHED { color: var(--text-sub); }
+
+/* ===== 空状态 ===== */
+.empty { padding: 120rpx 0; text-align: center; color: var(--text-sub); font-size: 26rpx; }
+
+/* ===== 表单 ===== */
+.field { margin-bottom: 24rpx; }
+.field-label { font-size: 26rpx; color: var(--text-sub); margin-bottom: 12rpx; }
+.input, .textarea {
+  background: #f6f7f9;
+  border-radius: 12rpx;
+  padding: 20rpx 24rpx;
+  font-size: 28rpx;
+  line-height: 44rpx;
+  width: 100%;
+  box-sizing: border-box;
+}
+.textarea { min-height: 160rpx; }
+
+.divider { height: 2rpx; background: var(--line); margin: 24rpx 0; }

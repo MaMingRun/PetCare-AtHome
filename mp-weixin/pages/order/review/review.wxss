@@ -1,0 +1,6 @@
+.star {
+  font-size: 48rpx;
+  color: #dcdee0;
+  margin-left: 12rpx;
+}
+.star-on { color: #ffb021; }

@@ -1,0 +1,49 @@
+<view class="page" wx:if="{{svc}}" style="padding-bottom: 160rpx">
+  <!-- 头部 -->
+  <view class="card row">
+    <view class="svc-cover">{{svc.firstChar}}</view>
+    <view class="col" style="flex:1">
+      <view class="title" style="font-size:36rpx">{{svc.name}}</view>
+      <view class="muted" style="margin:8rpx 0">{{svc.category}} · {{svc.durationMinutes}}分钟/次</view>
+      <view class="price" style="font-size:36rpx">{{svc.priceYuan}}<text class="muted" style="font-weight:400"> 起</text></view>
+    </view>
+  </view>
+
+  <!-- 标签 -->
+  <view class="card" wx:if="{{svc.tagList.length > 0}}">
+    <text wx:for="{{svc.tagList}}" wx:key="*this" class="tag">{{item}}</text>
+  </view>
+
+  <!-- 服务内容 -->
+  <view class="card" wx:if="{{svc.contentList.length > 0}}">
+    <view class="title" style="margin-bottom:16rpx">服务内容</view>
+    <view wx:for="{{svc.contentList}}" wx:key="*this" class="row" style="margin-bottom:12rpx">
+      <view class="dot"></view>
+      <view>{{item}}</view>
+    </view>
+  </view>
+
+  <!-- 计价规则 -->
+  <view class="card" wx:if="{{svc.ruleList.length > 0}}">
+    <view class="title" style="margin-bottom:16rpx">计价规则</view>
+    <view wx:for="{{svc.ruleList}}" wx:key="label" class="row between" style="margin-bottom:12rpx">
+      <view>{{item.label}}</view>
+      <view class="price">{{item.amountYuan}}</view>
+    </view>
+  </view>
+
+  <!-- 服务须知 -->
+  <view class="card" wx:if="{{svc.notice}}">
+    <view class="title" style="margin-bottom:16rpx">服务须知</view>
+    <view class="muted" style="line-height:1.7">{{svc.notice}}</view>
+  </view>
+
+  <!-- 退款政策 -->
+  <view class="card" wx:if="{{svc.refundPolicy}}">
+    <view class="title" style="margin-bottom:16rpx">退款政策</view>
+    <view class="muted" style="line-height:1.7">{{svc.refundPolicy}}</view>
+  </view>
+
+  <!-- 底部按钮 -->
+  <view class="btn btn-primary btn-bottom" bindtap="goCreate">立即预约</view>
+</view>
