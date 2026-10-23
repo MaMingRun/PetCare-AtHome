@@ -1,0 +1,61 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.mr.mapper.ReviewMapper">
+    <insert id="insert" useGeneratedKeys="true" keyProperty="id">
+        insert into review (order_id, user_id, provider_id, score_professional, score_punctual,
+                            score_communication, score_care, content, images, anonymous)
+        values (#{orderId}, #{userId}, #{providerId}, #{scoreProfessional}, #{scorePunctual},
+                #{scoreCommunication}, #{scoreCare}, #{content}, #{images}, #{anonymous})
+    </insert>
+    <select id="getByOrderId" resultType="com.mr.entity.Review">
+        select * from review where order_id = #{orderId}
+    </select>
+
+    <select id="listPage" resultType="com.mr.entity.Review">
+        select * from review
+        <where>
+            <if test="providerId != null">
+                and provider_id = #{providerId}
+            </if>
+            <if test="minScore != null">
+                and (score_professional + score_punctual + score_communication + score_care) / 4.0 &gt;= #{minScore}
+            </if>
+        </where>
+        order by id desc
+        limit #{offset}, #{size}
+    </select>
+
+    <select id="countPage" resultType="long">
+        select count(*) from review
+        <where>
+            <if test="providerId != null">
+                and provider_id = #{providerId}
+            </if>
+            <if test="minScore != null">
+                and (score_professional + score_punctual + score_communication + score_care) / 4.0 &gt;= #{minScore}
+            </if>
+        </where>
+    </select>
+
+    <select id="statSummary" resultType="map">
+        select
+            count(*) as totalCount,
+            round(avg(score_professional), 2) as avgProfessional,
+            round(avg(score_punctual), 2) as avgPunctual,
+            round(avg(score_communication), 2) as avgCommunication,
+            round(avg(score_care), 2) as avgCare,
+            round(avg((score_professional + score_punctual + score_communication + score_care) / 4.0), 2) as avgOverall,
+            sum(case when (score_professional + score_punctual + score_communication + score_care) / 4.0 &gt;= 4.5 then 1 else 0 end) as star5,
+            sum(case when (score_professional + score_punctual + score_communication + score_care) / 4.0 &gt;= 3.5 and (score_professional + score_punctual + score_communication + score_care) / 4.0 &lt; 4.5 then 1 else 0 end) as star4,
+            sum(case when (score_professional + score_punctual + score_communication + score_care) / 4.0 &gt;= 2.5 and (score_professional + score_punctual + score_communication + score_care) / 4.0 &lt; 3.5 then 1 else 0 end) as star3,
+            sum(case when (score_professional + score_punctual + score_communication + score_care) / 4.0 &gt;= 1.5 and (score_professional + score_punctual + score_communication + score_care) / 4.0 &lt; 2.5 then 1 else 0 end) as star2,
+            sum(case when (score_professional + score_punctual + score_communication + score_care) / 4.0 &lt; 1.5 then 1 else 0 end) as star1
+        from review
+        <where>
+            <if test="providerId != null">
+                and provider_id = #{providerId}
+            </if>
+        </where>
+    </select>
+</mapper>

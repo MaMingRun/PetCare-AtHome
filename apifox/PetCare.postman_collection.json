@@ -1,0 +1,299 @@
+{
+    "info": {
+        "_postman_id": "petcare-collection-001",
+        "name": "PetCare 宠物上门护理",
+        "description": "三端联调集合。使用顺序：① 先跑「1-登录」三个请求（token 自动写入环境变量）→ ② 按目录顺序点后续请求。「创建订单」成功后自动把 orderId 存入环境变量 order_id，支付/派单/接单/履约请求直接引用 {{order_id}}。",
+        "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+    },
+    "item": [
+        {
+            "name": "1-登录（先跑这三个）",
+            "item": [
+                {
+                    "name": "用户登录 parent001",
+                    "event": [
+                        {
+                            "listen": "test",
+                            "script": {
+                                "type": "text/javascript",
+                                "exec": [
+                                    "var j = pm.response.json();",
+                                    "if (j.code === 1 && j.data && j.data.token) {",
+                                    "    pm.environment.set('user_token', j.data.token);",
+                                    "    console.log('user_token 已保存');",
+                                    "} else {",
+                                    "    console.log('登录失败: ' + (j.msg || '未知错误'));",
+                                    "}"
+                                ]
+                            }
+                        }
+                    ],
+                    "request": {
+                        "method": "POST",
+                        "header": [ { "key": "Content-Type", "value": "application/json" } ],
+                        "body": { "mode": "raw", "raw": "{\n  \"code\": \"parent001\"\n}", "options": { "raw": { "language": "json" } } },
+                        "url": { "raw": "{{base_url}}/user/auth/login", "host": [ "{{base_url}}" ], "path": [ "user", "auth", "login" ] }
+                    }
+                },
+                {
+                    "name": "服务师登录 master001",
+                    "event": [
+                        {
+                            "listen": "test",
+                            "script": {
+                                "type": "text/javascript",
+                                "exec": [
+                                    "var j = pm.response.json();",
+                                    "if (j.code === 1 && j.data && j.data.token) {",
+                                    "    pm.environment.set('provider_token', j.data.token);",
+                                    "    console.log('provider_token 已保存');",
+                                    "} else {",
+                                    "    console.log('登录失败: ' + (j.msg || '未知错误'));",
+                                    "}"
+                                ]
+                            }
+                        }
+                    ],
+                    "request": {
+                        "method": "POST",
+                        "header": [ { "key": "Content-Type", "value": "application/json" } ],
+                        "body": { "mode": "raw", "raw": "{\n  \"code\": \"master001\"\n}", "options": { "raw": { "language": "json" } } },
+                        "url": { "raw": "{{base_url}}/provider/auth/login", "host": [ "{{base_url}}" ], "path": [ "provider", "auth", "login" ] }
+                    }
+                },
+                {
+                    "name": "管理员登录 admin",
+                    "event": [
+                        {
+                            "listen": "test",
+                            "script": {
+                                "type": "text/javascript",
+                                "exec": [
+                                    "var j = pm.response.json();",
+                                    "if (j.code === 1 && j.data && j.data.token) {",
+                                    "    pm.environment.set('admin_token', j.data.token);",
+                                    "    console.log('admin_token 已保存');",
+                                    "} else {",
+                                    "    console.log('登录失败: ' + (j.msg || '未知错误'));",
+                                    "}"
+                                ]
+                            }
+                        }
+                    ],
+                    "request": {
+                        "method": "POST",
+                        "header": [ { "key": "Content-Type", "value": "application/json" } ],
+                        "body": { "mode": "raw", "raw": "{\n  \"username\": \"admin\",\n  \"password\": \"123456\"\n}", "options": { "raw": { "language": "json" } } },
+                        "url": { "raw": "{{base_url}}/admin/auth/login", "host": [ "{{base_url}}" ], "path": [ "admin", "auth", "login" ] }
+                    }
+                }
+            ]
+        },
+        {
+            "name": "2-服务类目（用户端）",
+            "item": [
+                {
+                    "name": "服务列表",
+                    "request": {
+                        "method": "GET",
+                        "header": [ { "key": "authentication", "value": "{{user_token}}" } ],
+                        "url": { "raw": "{{base_url}}/user/services", "host": [ "{{base_url}}" ], "path": [ "user", "services" ], "query": [ { "key": "category", "value": "FEEDING", "disabled": true } ] }
+                    }
+                },
+                {
+                    "name": "服务详情 id=1",
+                    "request": {
+                        "method": "GET",
+                        "header": [ { "key": "authentication", "value": "{{user_token}}" } ],
+                        "url": { "raw": "{{base_url}}/user/services/1", "host": [ "{{base_url}}" ], "path": [ "user", "services", "1" ] }
+                    }
+                }
+            ]
+        },
+        {
+            "name": "3-下单与支付（用户端）",
+            "item": [
+                {
+                    "name": "价格试算（3宠2天8km=14800分）",
+                    "request": {
+                        "method": "POST",
+                        "header": [
+                            { "key": "Content-Type", "value": "application/json" },
+                            { "key": "authentication", "value": "{{user_token}}" }
+                        ],
+                        "body": { "mode": "raw", "raw": "{\n  \"serviceId\": 1,\n  \"petIds\": [1, 2, 3],\n  \"days\": 2,\n  \"distanceKm\": 8\n}", "options": { "raw": { "language": "json" } } },
+                        "url": { "raw": "{{base_url}}/user/orders/price-preview", "host": [ "{{base_url}}" ], "path": [ "user", "orders", "price-preview" ] }
+                    }
+                },
+                {
+                    "name": "创建订单（自动存 order_id）",
+                    "event": [
+                        {
+                            "listen": "test",
+                            "script": {
+                                "type": "text/javascript",
+                                "exec": [
+                                    "var j = pm.response.json();",
+                                    "if (j.code === 1 && j.data && j.data.orderId) {",
+                                    "    pm.environment.set('order_id', j.data.orderId);",
+                                    "    console.log('order_id 已保存: ' + j.data.orderId + '，15分钟内去支付');",
+                                    "} else {",
+                                    "    console.log('下单失败: ' + (j.msg || '未知错误'));",
+                                    "}"
+                                ]
+                            }
+                        }
+                    ],
+                    "request": {
+                        "method": "POST",
+                        "header": [
+                            { "key": "Content-Type", "value": "application/json" },
+                            { "key": "authentication", "value": "{{user_token}}" }
+                        ],
+                        "body": { "mode": "raw", "raw": "{\n  \"serviceId\": 1,\n  \"addressId\": 1,\n  \"petIds\": [1, 2],\n  \"startDate\": \"2026-10-19\",\n  \"days\": 1,\n  \"timeSlot\": \"10:00-11:00\",\n  \"remark\": \"Apifox 联调测试\",\n  \"distanceKm\": 5\n}", "options": { "raw": { "language": "json" } } },
+                        "url": { "raw": "{{base_url}}/user/orders", "host": [ "{{base_url}}" ], "path": [ "user", "orders" ] },
+                        "description": "注意：startDate 必须是未来日期，用之前改成明天或后天。"
+                    }
+                },
+                {
+                    "name": "支付订单 {{order_id}}",
+                    "request": {
+                        "method": "POST",
+                        "header": [ { "key": "authentication", "value": "{{user_token}}" } ],
+                        "url": { "raw": "{{base_url}}/user/orders/{{order_id}}/pay", "host": [ "{{base_url}}" ], "path": [ "user", "orders", "{{order_id}}", "pay" ] },
+                        "description": "创建订单后 15 分钟内支付，超时订单自动关闭。"
+                    }
+                }
+            ]
+        },
+        {
+            "name": "4-派单（管理端）",
+            "item": [
+                {
+                    "name": "待派单订单池",
+                    "request": {
+                        "method": "GET",
+                        "header": [ { "key": "token", "value": "{{admin_token}}" } ],
+                        "url": { "raw": "{{base_url}}/admin/orders/pending-accept", "host": [ "{{base_url}}" ], "path": [ "admin", "orders", "pending-accept" ] }
+                    }
+                },
+                {
+                    "name": "指派服务师 providerId=1",
+                    "request": {
+                        "method": "POST",
+                        "header": [
+                            { "key": "Content-Type", "value": "application/json" },
+                            { "key": "token", "value": "{{admin_token}}" }
+                        ],
+                        "body": { "mode": "raw", "raw": "{\n  \"providerId\": 1,\n  \"remark\": \"距离最近\"\n}", "options": { "raw": { "language": "json" } } },
+                        "url": { "raw": "{{base_url}}/admin/orders/{{order_id}}/dispatch", "host": [ "{{base_url}}" ], "path": [ "admin", "orders", "{{order_id}}", "dispatch" ] }
+                    }
+                }
+            ]
+        },
+        {
+            "name": "5-接单（服务师端）",
+            "item": [
+                {
+                    "name": "我的待响应派单",
+                    "request": {
+                        "method": "GET",
+                        "header": [ { "key": "provider-token", "value": "{{provider_token}}" } ],
+                        "url": { "raw": "{{base_url}}/provider/dispatches", "host": [ "{{base_url}}" ], "path": [ "provider", "dispatches" ] }
+                    }
+                },
+                {
+                    "name": "接单 {{order_id}}",
+                    "request": {
+                        "method": "POST",
+                        "header": [ { "key": "provider-token", "value": "{{provider_token}}" } ],
+                        "url": { "raw": "{{base_url}}/provider/orders/{{order_id}}/accept", "host": [ "{{base_url}}" ], "path": [ "provider", "orders", "{{order_id}}", "accept" ] },
+                        "description": "派单后 15 分钟内有效，超时需管理员重新派单。"
+                    }
+                },
+                {
+                    "name": "拒单 {{order_id}}",
+                    "request": {
+                        "method": "POST",
+                        "header": [
+                            { "key": "Content-Type", "value": "application/json" },
+                            { "key": "provider-token", "value": "{{provider_token}}" }
+                        ],
+                        "body": { "mode": "raw", "raw": "{\n  \"remark\": \"距离太远\"\n}", "options": { "raw": { "language": "json" } } },
+                        "url": { "raw": "{{base_url}}/provider/orders/{{order_id}}/reject", "host": [ "{{base_url}}" ], "path": [ "provider", "orders", "{{order_id}}", "reject" ] }
+                    }
+                }
+            ]
+        },
+        {
+            "name": "6-履约打卡（服务师端，按顺序点）",
+            "item": [
+                {
+                    "name": "① 出发 depart",
+                    "request": {
+                        "method": "POST",
+                        "header": [ { "key": "provider-token", "value": "{{provider_token}}" } ],
+                        "url": { "raw": "{{base_url}}/provider/orders/{{order_id}}/depart", "host": [ "{{base_url}}" ], "path": [ "provider", "orders", "{{order_id}}", "depart" ] }
+                    }
+                },
+                {
+                    "name": "② 到达 arrive（打卡+定位）",
+                    "request": {
+                        "method": "POST",
+                        "header": [
+                            { "key": "Content-Type", "value": "application/json" },
+                            { "key": "provider-token", "value": "{{provider_token}}" }
+                        ],
+                        "body": { "mode": "raw", "raw": "{\n  \"longitude\": 113.321,\n  \"latitude\": 23.119\n}", "options": { "raw": { "language": "json" } } },
+                        "url": { "raw": "{{base_url}}/provider/orders/{{order_id}}/arrive", "host": [ "{{base_url}}" ], "path": [ "provider", "orders", "{{order_id}}", "arrive" ] },
+                        "description": "address.id=1 的真实坐标（广州）。距离≈0 则 deviation_alert=0；故意填远处坐标可触发告警（如 113.5, 23.3）。"
+                    }
+                },
+                {
+                    "name": "③ 开始服务 start",
+                    "request": {
+                        "method": "POST",
+                        "header": [ { "key": "provider-token", "value": "{{provider_token}}" } ],
+                        "url": { "raw": "{{base_url}}/provider/orders/{{order_id}}/start", "host": [ "{{base_url}}" ], "path": [ "provider", "orders", "{{order_id}}", "start" ] },
+                        "description": "要求今天 = 订单服务日（order_day.date），否则报「今天不是该订单的服务日」。"
+                    }
+                },
+                {
+                    "name": "留痕-照片 PHOTO",
+                    "request": {
+                        "method": "POST",
+                        "header": [
+                            { "key": "Content-Type", "value": "application/json" },
+                            { "key": "provider-token", "value": "{{provider_token}}" }
+                        ],
+                        "body": { "mode": "raw", "raw": "{\n  \"type\": \"PHOTO\",\n  \"mediaUrl\": \"https://example.com/feed-01.jpg\",\n  \"remark\": \"喂粮完成\"\n}", "options": { "raw": { "language": "json" } } },
+                        "url": { "raw": "{{base_url}}/provider/orders/{{order_id}}/records", "host": [ "{{base_url}}" ], "path": [ "provider", "orders", "{{order_id}}", "records" ] },
+                        "description": "仅 SERVING 状态可调用。PHOTO/VIDEO 必填 mediaUrl。"
+                    }
+                },
+                {
+                    "name": "留痕-文字 NOTE",
+                    "request": {
+                        "method": "POST",
+                        "header": [
+                            { "key": "Content-Type", "value": "application/json" },
+                            { "key": "provider-token", "value": "{{provider_token}}" }
+                        ],
+                        "body": { "mode": "raw", "raw": "{\n  \"type\": \"NOTE\",\n  \"remark\": \"橘座吃了半碗，状态良好\"\n}", "options": { "raw": { "language": "json" } } },
+                        "url": { "raw": "{{base_url}}/provider/orders/{{order_id}}/records", "host": [ "{{base_url}}" ], "path": [ "provider", "orders", "{{order_id}}", "records" ] },
+                        "description": "仅 SERVING 状态可调用。NOTE 必填 remark。"
+                    }
+                },
+                {
+                    "name": "④ 完成当天 finish-day",
+                    "request": {
+                        "method": "POST",
+                        "header": [ { "key": "provider-token", "value": "{{provider_token}}" } ],
+                        "url": { "raw": "{{base_url}}/provider/orders/{{order_id}}/finish-day", "host": [ "{{base_url}}" ], "path": [ "provider", "orders", "{{order_id}}", "finish-day" ] },
+                        "description": "单日订单完成后主状态进 PENDING_CONFIRM；再点一次应报「订单状态已变化」（幂等验证）。"
+                    }
+                }
+            ]
+        }
+    ]
+}

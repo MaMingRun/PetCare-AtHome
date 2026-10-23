@@ -1,0 +1,66 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.mr.mapper.OrderDispatchMapper">
+
+    <insert id="insert" useGeneratedKeys="true" keyProperty="id">
+        insert into order_dispatch (
+            order_id, provider_id, action, remark, operator_id, response_deadline
+        ) values (
+                     #{orderId}, #{providerId}, #{action}, #{remark}, #{operatorId}, #{responseDeadline}
+                 )
+    </insert>
+
+    <select id="findLatestByOrderAndProvider" resultType="com.mr.entity.OrderDispatch">
+        select * from order_dispatch
+        where order_id = #{orderId} and provider_id = #{providerId}
+        order by id desc limit 1
+    </select>
+
+    <!-- 待响应 = 我最新一条记录是 DISPATCH、订单仍为待接单、响应未超时 -->
+    <select id="listPendingByProvider" resultType="com.mr.vo.ProviderDispatchVO">
+        select d.id            as dispatchId,
+               d.order_id      as orderId,
+               d.response_deadline as responseDeadline,
+               d.created_at    as dispatchAt,
+               o.order_no      as orderNo,
+               o.service_name  as serviceName,
+               o.start_date    as startDate,
+               o.days          as days,
+               o.time_slot     as timeSlot,
+               o.city          as city,
+               o.district      as district,
+               o.community     as community,
+               o.detail        as detail,
+               o.entry_mode    as entryMode,
+               o.pay_amount    as payAmount,
+               o.remark        as remark
+        from order_dispatch d
+        join orders o on o.id = d.order_id
+        where d.provider_id = #{providerId}
+          and d.action = 'DISPATCH'
+          and o.status = 'PENDING_ACCEPT'
+          and d.response_deadline > now()
+          and not exists (
+              select 1 from order_dispatch d2
+              where d2.order_id = d.order_id and d2.provider_id = d.provider_id
+                and d2.action in ('ACCEPT', 'REJECT') and d2.id > d.id
+          )
+        order by d.id desc
+    </select>
+
+    <!-- 超时扫描：latest 语义 = not exists 更新的记录 -->
+    <select id="listExpiredPending" resultType="com.mr.entity.OrderDispatch">
+        select d.* from order_dispatch d
+                            join orders o on o.id = d.order_id
+        where d.action = 'DISPATCH'
+          and d.response_deadline <![CDATA[ < ]]> now()
+          and o.status = 'PENDING_ACCEPT'
+          and not exists (
+            select 1 from order_dispatch d2
+            where d2.order_id = d.order_id and d2.provider_id = d.provider_id
+              and d2.id > d.id
+        )
+    </select>
+
+</mapper>

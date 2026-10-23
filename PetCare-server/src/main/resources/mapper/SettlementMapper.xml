@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.mr.mapper.SettlementMapper">
+    <insert id="insert" useGeneratedKeys="true" keyProperty="id">
+        insert into settlement (order_id, provider_id, order_amount, platform_fee, net_amount, frozen_reason)
+        values (#{orderId}, #{providerId}, #{orderAmount}, #{platformFee}, #{netAmount}, #{frozenReason})
+    </insert>
+    <update id="markSettled">
+        update settlement set status='SETTLED', settled_at=now()
+        where id = #{id} and status = 'PENDING'
+    </update>
+    <select id="listPending" resultType="com.mr.entity.Settlement">
+        select * from settlement where status='PENDING' order by id asc limit 100
+    </select>
+    <select id="countPending" resultType="long">
+        select count(*) from settlement where status='PENDING'
+    </select>
+</mapper>

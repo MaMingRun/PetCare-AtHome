@@ -1,0 +1,66 @@
+server:
+  port: 8080
+
+spring:
+  profiles:
+    active: dev
+  main:
+    allow-circular-references: true
+  datasource:
+    druid:
+      driver-class-name: ${pet.datasource.driver-class-name}
+      url: jdbc:mysql://${pet.datasource.host}:${pet.datasource.port}/${pet.datasource.database}?serverTimezone=Asia/Shanghai&useUnicode=true&characterEncoding=utf-8&zeroDateTimeBehavior=convertToNull&useSSL=false&allowPublicKeyRetrieval=true
+      username: ${pet.datasource.username}
+      password: ${pet.datasource.password}
+  data:
+    redis:
+      host: ${pet.redis.host}
+      port: ${pet.redis.port}
+      password: ${pet.redis.password}
+      database: ${pet.redis.database}
+
+
+
+mybatis:
+  #mapper配置文件
+  mapper-locations: classpath:mapper/*.xml
+  type-aliases-package: com.mr.entity
+  configuration:
+    #开启驼峰命名
+    map-underscore-to-camel-case: true
+
+logging:
+  level:
+    com:
+      sky:
+        mapper: debug
+        service: info
+        controller: info
+
+pet:
+  jwt:
+    # 设置jwt签名加密时使用的秘钥（HS256要求至少32字符）
+    # 生产环境请替换为随机强密钥并通过环境变量注入（${JWT_ADMIN_SECRET} 等）
+    admin-secret-key: "****************************"
+    admin-ttl: 7200000
+    admin-token-name: token
+    user-secret-key: "****************************"
+    user-ttl: 7200000
+    user-token-name: authentication
+    provider-secret-key: "****************************"
+    provider-ttl: 7200000
+    provider-token-name: provider-token
+  alioss:
+    endpoint: ${pet.alioss.endpoint}
+    access-key-id: ${pet.alioss.access-key-id}
+    access-key-secret: ${pet.alioss.access-key-secret}
+    bucket-name: ${pet.alioss.bucket-name}
+  wecaht:
+    appid: ${pet.wecaht.appid}
+    secret: ${pet.wechat.secret}
+  shop:
+    address: ${pet.shop.address}
+  baidu:
+    ak: ${pet.baidu.ak}
+  crypto:
+    aes-key: "********************************"

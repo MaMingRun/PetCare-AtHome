@@ -1,0 +1,230 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.mr.mapper.OrderMapper">
+
+    <insert id="insert" useGeneratedKeys="true" keyProperty="id">
+        insert into orders (
+            order_no, user_id, service_id, service_name, status,
+            start_date, days, time_slot, remark,
+            contact_name, contact_phone, city, district, community, detail,
+            longitude, latitude, entry_mode,
+            base_amount, extra_amount, discount_amount, total_amount, pay_amount,
+            pay_expire_at, address_id
+        ) values (
+                     #{orderNo}, #{userId}, #{serviceId}, #{serviceName}, #{status},
+                     #{startDate}, #{days}, #{timeSlot}, #{remark},
+                     #{contactName}, #{contactPhone}, #{city}, #{district}, #{community}, #{detail},
+                     #{longitude}, #{latitude}, #{entryMode},
+                     #{baseAmount}, #{extraAmount}, #{discountAmount}, #{totalAmount}, #{payAmount},
+                     #{payExpireAt}, #{addressId}
+                 )
+    </insert>
+
+    <select id="getById" resultType="com.mr.entity.Orders">
+        select * from orders where id = #{id}
+    </select>
+
+    <select id="getByIdAndUser" resultType="com.mr.entity.Orders">
+        select * from orders
+        where id = #{id} and user_id = #{userId} and deleted_at is null
+    </select>
+
+    <select id="getByOrderNo" resultType="com.mr.entity.Orders">
+        select * from orders where order_no = #{orderNo}
+    </select>
+
+    <!-- 幂等入账核心：只有当前还是 fromStatus 才流转，重复回调匹配不到行 -->
+    <update id="markPaid">
+        update orders
+        set status = #{toStatus}, pay_time = now()
+        where order_no = #{orderNo} and status = #{fromStatus}
+    </update>
+
+    <select id="listByStatus" resultType="com.mr.entity.Orders">
+        select * from orders
+        where status = #{status} and deleted_at is null
+        order by created_at asc
+        limit 50
+    </select>
+
+    <!-- 接单核心：条件更新防并发抢单，两个服务师同时接只有一个成功 -->
+    <update id="markAccepted">
+        update orders
+        set status = #{toStatus}, provider_id = #{providerId}, confirmed_at = now()
+        where id = #{orderId} and status = #{fromStatus} and provider_id is null
+    </update>
+
+    <select id="lockById" resultType="java.lang.Long">
+        select id from orders where id = #{orderId} for update
+    </select>
+
+    <update id="updateStatus">
+        update orders
+        set status = #{to}
+        where id = #{id} and status = #{from} and provider_id = #{providerId}
+    </update>
+
+    <update id="confirmByUser">
+        update orders
+        set status = 'SETTLING', confirmed_at = now()
+        where id = #{id} and status = 'PENDING_CONFIRM'
+    </update>
+
+    <!-- 管理端订单分页（状态+keyword 过滤，keyword 模糊 order_no / contact_phone） -->
+    <select id="listPage" resultType="com.mr.entity.Orders">
+        select * from orders
+        <where>
+            deleted_at is null
+            <if test="status != null and status != ''">
+                and status = #{status}
+            </if>
+            <if test="keyword != null and keyword != ''">
+                and (order_no like concat('%', #{keyword}, '%')
+                     or contact_phone like concat('%', #{keyword}, '%'))
+            </if>
+        </where>
+        order by id desc
+        limit #{offset}, #{size}
+    </select>
+    <select id="countPage" resultType="long">
+        select count(*) from orders
+        <where>
+            deleted_at is null
+            <if test="status != null and status != ''">
+                and status = #{status}
+            </if>
+            <if test="keyword != null and keyword != ''">
+                and (order_no like concat('%', #{keyword}, '%')
+                     or contact_phone like concat('%', #{keyword}, '%'))
+            </if>
+        </where>
+    </select>
+
+    <!-- Dashboard 统计 -->
+    <select id="countByStatus" resultType="long">
+        select count(*) from orders where status = #{status}
+    </select>
+    <select id="countToday" resultType="long">
+        select count(*) from orders
+        where date(created_at) = curdate()
+    </select>
+    <select id="sumPayAmountPaid" resultType="long">
+        select coalesce(sum(pay_amount), 0) from orders
+        where status in ('PENDING_ACCEPT','ACCEPTED','DEPARTED','ARRIVED','SERVING',
+                         'PENDING_CONFIRM','SETTLING','REVIEWED','FINISHED','REFUNDING')
+    </select>
+    <select id="countTotalOrders" resultType="long">
+        select count(*) from orders where deleted_at is null
+    </select>
+    <select id="countPaidAndAfter" resultType="long">
+        select count(*) from orders
+        where deleted_at is null and status != 'PENDING_PAY'
+    </select>
+
+    <!-- 支付超时：PENDING_PAY 且过期 -->
+    <select id="listPayExpired" resultType="com.mr.entity.Orders">
+        select * from orders
+        where status = 'PENDING_PAY'
+        and pay_expire_at is not null
+        and pay_expire_at &lt; now()
+    </select>
+    <update id="markPayCancelled">
+        update orders
+        set status = 'CANCELLED', cancel_time = now(),
+            cancel_reason_code = 'PAY_TIMEOUT', cancel_remark = '支付超时自动取消'
+        where id = #{id} and status = 'PENDING_PAY'
+    </update>
+
+    <!-- 派单超时：PENDING_ACCEPT 且过期 -->
+    <select id="listDispatchExpired" resultType="com.mr.entity.Orders">
+        select * from orders
+        where status = 'PENDING_ACCEPT'
+        and dispatch_deadline is not null
+        and dispatch_deadline &lt; now()
+    </select>
+    <update id="markDispatchCancelled">
+        update orders
+        set status = 'CANCELLED', cancel_time = now(),
+            cancel_reason_code = 'DISPATCH_TIMEOUT', cancel_remark = '派单超时无服务师响应，自动取消'
+        where id = #{id} and status = 'PENDING_ACCEPT'
+    </update>
+
+    <!-- 确认超时：PENDING_CONFIRM 且过期 → 自动 SETTLING -->
+    <select id="listConfirmExpired" resultType="com.mr.entity.Orders">
+        select * from orders
+        where status = 'PENDING_CONFIRM'
+        and confirm_deadline is not null
+        and confirm_deadline &lt; now()
+    </select>
+    <update id="markConfirmAutoSettling">
+        update orders
+        set status = 'SETTLING', confirmed_at = now()
+        where id = #{id} and status = 'PENDING_CONFIRM'
+    </update>
+
+    <!-- 评价超时：SETTLING 且 review_deadline < now() → 自动 FINISHED -->
+    <update id="markReviewAutoFinished">
+        update orders
+        set status = 'FINISHED'
+        where id = #{id} and status = 'SETTLING'
+        and review_deadline is not null
+        and review_deadline &lt; now()
+    </update>
+
+    <update id="batchReviewAutoFinished">
+        update orders
+        set status = 'FINISHED'
+        where status = 'SETTLING'
+        and review_deadline is not null
+        and review_deadline &lt; now()
+    </update>
+
+    <!-- 用户端：我的订单分页（归属在 SQL 内） -->
+    <select id="listPageByUser" resultType="com.mr.entity.Orders">
+        select * from orders
+        <where>
+            user_id = #{userId} and deleted_at is null
+            <if test="status != null and status != ''">
+                and status = #{status}
+            </if>
+        </where>
+        order by id desc
+        limit #{offset}, #{size}
+    </select>
+    <select id="countPageByUser" resultType="long">
+        select count(*) from orders
+        <where>
+            user_id = #{userId} and deleted_at is null
+            <if test="status != null and status != ''">
+                and status = #{status}
+            </if>
+        </where>
+    </select>
+
+    <!-- 用户取消未支付订单：卡归属 + 前态，重复取消/越权都影响0行 -->
+    <update id="cancelByUser">
+        update orders
+        set status = 'CANCELLED', cancel_time = now(),
+            cancel_reason_code = 'USER_CANCEL', cancel_remark = '用户主动取消'
+        where id = #{id} and user_id = #{userId} and status = 'PENDING_PAY'
+    </update>
+
+    <!-- 服务师端：我的订单列表（归属在 SQL 内） -->
+    <select id="listByProvider" resultType="com.mr.entity.Orders">
+        select * from orders
+        <where>
+            provider_id = #{providerId} and deleted_at is null
+            <if test="status != null and status != ''">
+                and status = #{status}
+            </if>
+        </where>
+        order by id desc
+        limit 100
+    </select>
+
+    <select id="getByIdAndProvider" resultType="com.mr.entity.Orders">
+        select * from orders
+        where id = #{id} and provider_id = #{providerId} and deleted_at is null
+    </select>
+</mapper>

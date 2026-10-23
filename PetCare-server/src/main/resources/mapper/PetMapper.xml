@@ -1,0 +1,58 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.mr.mapper.PetMapper">
+
+    <select id="listByIdsAndUser" resultType="com.mr.entity.Pet">
+        select * from pet
+        where user_id = #{userId} and deleted_at is null
+        and id in
+        <foreach collection="ids" item="id" open="(" separator="," close=")">
+            #{id}
+        </foreach>
+    </select>
+
+    <select id="listByUser" resultType="com.mr.entity.Pet">
+        select * from pet
+        where user_id = #{userId} and deleted_at is null
+        order by id desc
+    </select>
+
+    <insert id="insert" useGeneratedKeys="true" keyProperty="id">
+        insert into pet (
+            user_id, name, species, breed, gender, birthday, weight_kg,
+            sterilized, avatar, personality_tags, personality_note,
+            allergies, chronic_disease, feeding_instruction
+        ) values (
+            #{userId}, #{name}, #{species}, #{breed}, #{gender}, #{birthday}, #{weightKg},
+            #{sterilized}, #{avatar}, #{personalityTags}, #{personalityNote},
+            #{allergies}, #{chronicDisease}, #{feedingInstruction}
+        )
+    </insert>
+
+    <update id="updateByUser">
+        update pet
+        <set>
+            <if test="name != null">name = #{name},</if>
+            <if test="species != null">species = #{species},</if>
+            <if test="breed != null">breed = #{breed},</if>
+            <if test="gender != null">gender = #{gender},</if>
+            <if test="birthday != null">birthday = #{birthday},</if>
+            <if test="weightKg != null">weight_kg = #{weightKg},</if>
+            <if test="sterilized != null">sterilized = #{sterilized},</if>
+            <if test="avatar != null">avatar = #{avatar},</if>
+            <if test="personalityTags != null">personality_tags = #{personalityTags},</if>
+            <if test="personalityNote != null">personality_note = #{personalityNote},</if>
+            <if test="allergies != null">allergies = #{allergies},</if>
+            <if test="chronicDisease != null">chronic_disease = #{chronicDisease},</if>
+            <if test="feedingInstruction != null">feeding_instruction = #{feedingInstruction},</if>
+        </set>
+        where id = #{id} and user_id = #{userId} and deleted_at is null
+    </update>
+
+    <update id="deleteByUser">
+        update pet set deleted_at = now()
+        where id = #{id} and user_id = #{userId} and deleted_at is null
+    </update>
+
+</mapper>

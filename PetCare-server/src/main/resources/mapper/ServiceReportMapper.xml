@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.mr.mapper.ServiceReportMapper">
+
+    <insert id="insert" useGeneratedKeys="true" keyProperty="id">
+        insert into service_report
+        (order_id, day_id, provider_id, eating, drinking, excretion, spirit,
+         abnormalities, photos, summary, submitted_at)
+        values (#{orderId}, #{dayId}, #{providerId}, #{eating}, #{drinking}, #{excretion}, #{spirit},
+                #{abnormalities}, #{photos}, #{summary}, #{submittedAt})
+    </insert>
+
+    <select id="getByDayId" resultType="com.mr.entity.ServiceReport">
+        select * from service_report where day_id = #{dayId}
+    </select>
+</mapper>

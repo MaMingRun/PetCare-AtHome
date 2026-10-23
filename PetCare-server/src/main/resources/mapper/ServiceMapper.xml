@@ -1,0 +1,88 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.mr.mapper.ServiceMapper">
+
+    <select id="listOnShelf" resultType="com.mr.vo.ServiceCardVO">
+        select id, name, category, cover_url, price_from, duration_minutes, tags
+        from service
+        where status = 'ON' and deleted_at is null
+        <if test="category != null and category != ''">
+            and category = #{category}
+        </if>
+        order by sort asc
+    </select>
+
+    <select id="getOnShelfById" resultType="com.mr.entity.Service">
+        select * from service
+        where id = #{id} and status = 'ON' and deleted_at is null
+    </select>
+
+    <!-- 管理端 -->
+    <select id="listPage" resultType="com.mr.entity.Service">
+        select * from service
+        <where>
+            deleted_at is null
+            <if test="status != null and status != ''">
+                and status = #{status}
+            </if>
+            <if test="category != null and category != ''">
+                and category = #{category}
+            </if>
+            <if test="keyword != null and keyword != ''">
+                and name like concat('%', #{keyword}, '%')
+            </if>
+        </where>
+        order by sort asc, id desc
+        limit #{offset}, #{size}
+    </select>
+
+    <select id="countPage" resultType="long">
+        select count(*) from service
+        <where>
+            deleted_at is null
+            <if test="status != null and status != ''">
+                and status = #{status}
+            </if>
+            <if test="category != null and category != ''">
+                and category = #{category}
+            </if>
+            <if test="keyword != null and keyword != ''">
+                and name like concat('%', #{keyword}, '%')
+            </if>
+        </where>
+    </select>
+
+    <select id="getById" resultType="com.mr.entity.Service">
+        select * from service where id = #{id} and deleted_at is null
+    </select>
+
+    <insert id="insertService" useGeneratedKeys="true" keyProperty="id">
+        insert into service (name, category, cover_url, price_from, duration_minutes,
+                             tags, content_items, notice, refund_policy, status, sort)
+        values (#{name}, #{category}, #{coverUrl}, #{priceFrom}, #{durationMinutes},
+                #{tags}, #{contentItems}, #{notice}, #{refundPolicy}, #{status}, #{sort})
+    </insert>
+
+    <update id="updateService">
+        update service set
+            name = #{name},
+            category = #{category},
+            cover_url = #{coverUrl},
+            price_from = #{priceFrom},
+            duration_minutes = #{durationMinutes},
+            tags = #{tags},
+            content_items = #{contentItems},
+            notice = #{notice},
+            refund_policy = #{refundPolicy},
+            sort = #{sort},
+            updated_at = now()
+        where id = #{id} and deleted_at is null
+    </update>
+
+    <update id="updateStatus">
+        update service set status = #{status}, updated_at = now()
+        where id = #{id} and deleted_at is null
+    </update>
+
+</mapper>

@@ -1,0 +1,44 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.mr.mapper.WithdrawalMapper">
+    <insert id="insert" useGeneratedKeys="true" keyProperty="id">
+        insert into withdrawal (withdrawal_no, provider_id, bank_card_id, amount)
+        values (#{withdrawalNo}, #{providerId}, #{bankCardId}, #{amount})
+    </insert>
+    <select id="getById" resultType="com.mr.entity.Withdrawal">
+        select * from withdrawal where id = #{id}
+    </select>
+    <update id="markApproved">
+        update withdrawal set status='APPROVED', audited_at=now(), auditor_id=#{auditorId}
+        where id=#{id} and status='APPLIED'
+    </update>
+    <update id="markRejected">
+        update withdrawal set status='REJECTED', audited_at=now(), auditor_id=#{auditorId}, reject_reason=#{reason}
+        where id=#{id} and status='APPLIED'
+    </update>
+    <update id="markPaid">
+        update withdrawal set status='PAID', paid_at=now(), transfer_no=#{transferNo}
+        where id=#{id} and status='APPROVED'
+    </update>
+
+    <!-- 管理端提现单分页（状态过滤） -->
+    <select id="listPage" resultType="com.mr.entity.Withdrawal">
+        select * from withdrawal
+        <where>
+            <if test="status != null and status != ''">
+                and status = #{status}
+            </if>
+        </where>
+        order by id desc
+        limit #{offset}, #{size}
+    </select>
+    <select id="countPage" resultType="long">
+        select count(*) from withdrawal
+        <where>
+            <if test="status != null and status != ''">
+                and status = #{status}
+            </if>
+        </where>
+    </select>
+</mapper>

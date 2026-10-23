@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.mr.mapper.ServicePriceRuleMapper">
+
+    <select id="listByServiceId" resultType="com.mr.vo.PriceRuleVO">
+        select rule_type, label, amount, rule_config
+        from service_price_rule
+        where service_id = #{serviceId}
+    </select>
+
+    <select id="listEntityByServiceId" resultType="com.mr.entity.ServicePriceRule">
+        select * from service_price_rule where service_id = #{serviceId}
+    </select>
+
+</mapper>

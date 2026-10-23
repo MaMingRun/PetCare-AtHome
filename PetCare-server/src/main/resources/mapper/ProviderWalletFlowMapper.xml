@@ -1,0 +1,38 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.mr.mapper.ProviderWalletFlowMapper">
+    <insert id="insert" useGeneratedKeys="true" keyProperty="id">
+        insert into provider_wallet_flow (provider_id, biz_type, amount, balance_after, biz_id, remark)
+        values (#{providerId}, #{bizType}, #{amount}, #{balanceAfter}, #{bizId}, #{remark})
+    </insert>
+    <select id="listByProvider" resultType="com.mr.entity.ProviderWalletFlow">
+        select * from provider_wallet_flow where provider_id = #{providerId} order by id desc limit 100
+    </select>
+
+    <select id="listPage" resultType="com.mr.entity.ProviderWalletFlow">
+        select * from provider_wallet_flow
+        <where>
+            <if test="providerId != null">
+                and provider_id = #{providerId}
+            </if>
+            <if test="bizType != null and bizType != ''">
+                and biz_type = #{bizType}
+            </if>
+        </where>
+        order by id desc
+        limit #{offset}, #{size}
+    </select>
+
+    <select id="countPage" resultType="long">
+        select count(*) from provider_wallet_flow
+        <where>
+            <if test="providerId != null">
+                and provider_id = #{providerId}
+            </if>
+            <if test="bizType != null and bizType != ''">
+                and biz_type = #{bizType}
+            </if>
+        </where>
+    </select>
+</mapper>

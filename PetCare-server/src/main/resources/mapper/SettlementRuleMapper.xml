@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.mr.mapper.SettlementRuleMapper">
+    <select id="getByCity" resultType="com.mr.entity.SettlementRule">
+        select * from settlement_rule
+        where (city = #{city} or (city is null or city = ''))
+        order by case when city = #{city} then 0 else 1 end
+        limit 1
+    </select>
+</mapper>

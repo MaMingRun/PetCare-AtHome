@@ -1,0 +1,62 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.mr.mapper.UserMapper">
+
+    <select id="getByOpenid" resultType="com.mr.entity.User">
+        select * from user where openid = #{openid} and deleted_at is null
+    </select>
+
+    <select id="getById" resultType="com.mr.entity.User">
+        select * from user where id = #{id} and deleted_at is null
+    </select>
+
+    <insert id="insert" useGeneratedKeys="true" keyProperty="id">
+        insert into user (openid, nickname, status)
+        values (#{openid}, #{nickname}, 'NORMAL')
+    </insert>
+
+    <update id="updatePhone">
+        update user set phone = #{phone} where id = #{id}
+    </update>
+
+    <update id="updateLastLoginAt">
+        update user set last_login_at = now() where id = #{id}
+    </update>
+
+    <select id="listPage" resultType="com.mr.entity.User">
+        select * from user
+        <where>
+            deleted_at is null
+            <if test="status != null and status != ''">
+                and status = #{status}
+            </if>
+            <if test="keyword != null and keyword != ''">
+                and (nickname like concat('%', #{keyword}, '%')
+                     or phone like concat('%', #{keyword}, '%'))
+            </if>
+        </where>
+        order by id desc
+        limit #{offset}, #{size}
+    </select>
+
+    <select id="countPage" resultType="long">
+        select count(*) from user
+        <where>
+            deleted_at is null
+            <if test="status != null and status != ''">
+                and status = #{status}
+            </if>
+            <if test="keyword != null and keyword != ''">
+                and (nickname like concat('%', #{keyword}, '%')
+                     or phone like concat('%', #{keyword}, '%'))
+            </if>
+        </where>
+    </select>
+
+    <update id="updateBlacklist">
+        update user set blacklisted = #{blacklisted}, blacklist_reason = #{reason}, updated_at = now()
+        where id = #{id}
+    </update>
+
+</mapper>

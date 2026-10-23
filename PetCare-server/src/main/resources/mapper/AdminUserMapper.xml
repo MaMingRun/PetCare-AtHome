@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.mr.mapper.AdminUserMapper">
+
+    <select id="getByUsername" resultType="com.mr.entity.AdminUser">
+        select * from admin_user where username = #{username} and deleted_at is null
+    </select>
+
+    <insert id="insert" useGeneratedKeys="true" keyProperty="id">
+        insert into admin_user (username, password_hash, real_name, role_id, status)
+        values (#{username}, #{passwordHash}, #{realName}, #{roleId}, #{status})
+    </insert>
+</mapper>

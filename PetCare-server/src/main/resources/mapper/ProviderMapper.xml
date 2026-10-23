@@ -1,0 +1,85 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.mr.mapper.ProviderMapper">
+
+    <select id="getByOpenid" resultType="com.mr.entity.Provider">
+        select * from provider where openid = #{openid} and deleted_at is null
+    </select>
+
+    <!-- 首次登录建壳账号：phone/real_name/id_card 等占位，入驻申请流程再补真实值 -->
+    <insert id="insert" useGeneratedKeys="true" keyProperty="id">
+        insert into provider (openid, phone, real_name, id_card_no_cipher, city, years, status)
+        values (#{openid}, '', '待完善', '', '', 0, 'PENDING')
+    </insert>
+
+    <update id="updateLastLoginAt">
+        update provider set last_login_at = now() where id = #{id}
+    </update>
+
+    <select id="getById" resultType="com.mr.entity.Provider">
+        select * from provider where id = #{id} and deleted_at is null
+    </select>
+
+    <update id="incrementRejectCount">
+        update provider set reject_count_7d = reject_count_7d + 1 where id = #{id}
+    </update>
+
+    <update id="updateRating">
+        update provider
+        set rating_avg = #{ratingAvg},
+            rating_professional = #{ratingProf},
+            rating_punctual = #{ratingPunct},
+            rating_communication = #{ratingComm},
+            rating_care = #{ratingCare},
+            service_count = #{serviceCount}
+        where id = #{id}
+    </update>
+
+    <select id="countTotalActive" resultType="long">
+        select count(*) from provider where status='ACTIVE' and deleted_at is null
+    </select>
+
+    <select id="listActive" resultType="com.mr.entity.Provider">
+        select id, real_name, phone, city, rating_avg, service_count
+        from provider where status = 'ACTIVE' and deleted_at is null
+        order by rating_avg desc, service_count desc
+    </select>
+
+    <!-- 管理端：服务师分页列表 -->
+    <select id="listPage" resultType="com.mr.entity.Provider">
+        select * from provider
+        <where>
+            deleted_at is null
+            <if test="status != null and status != ''">
+                and status = #{status}
+            </if>
+            <if test="keyword != null and keyword != ''">
+                and (real_name like concat('%', #{keyword}, '%')
+                     or phone like concat('%', #{keyword}, '%'))
+            </if>
+        </where>
+        order by id desc
+        limit #{offset}, #{size}
+    </select>
+
+    <select id="countPage" resultType="long">
+        select count(*) from provider
+        <where>
+            deleted_at is null
+            <if test="status != null and status != ''">
+                and status = #{status}
+            </if>
+            <if test="keyword != null and keyword != ''">
+                and (real_name like concat('%', #{keyword}, '%')
+                     or phone like concat('%', #{keyword}, '%'))
+            </if>
+        </where>
+    </select>
+
+    <update id="updateStatus">
+        update provider set status = #{status}, updated_at = now()
+        where id = #{id} and deleted_at is null
+    </update>
+
+</mapper>

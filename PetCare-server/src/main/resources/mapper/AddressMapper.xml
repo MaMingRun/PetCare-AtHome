@@ -1,0 +1,61 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.mr.mapper.AddressMapper">
+
+    <select id="getByIdAndUser" resultType="com.mr.entity.Address">
+        select * from address
+        where id = #{id} and user_id = #{userId} and deleted_at is null
+    </select>
+
+    <select id="getById" resultType="com.mr.entity.Address">
+        select * from address where id = #{id} and deleted_at is null
+    </select>
+
+    <select id="listByUser" resultType="com.mr.entity.Address">
+        select * from address
+        where user_id = #{userId} and deleted_at is null
+        order by is_default desc, id desc
+    </select>
+
+    <insert id="insert" useGeneratedKeys="true" keyProperty="id">
+        insert into address (
+            user_id, contact_name, contact_phone, city, district, community, detail,
+            longitude, latitude, entry_mode, entry_secret_cipher, is_default
+        ) values (
+            #{userId}, #{contactName}, #{contactPhone}, #{city}, #{district}, #{community}, #{detail},
+            #{longitude}, #{latitude}, #{entryMode}, #{entrySecretCipher}, #{isDefault}
+        )
+    </insert>
+
+    <update id="updateByUser">
+        update address
+        <set>
+            <if test="contactName != null">contact_name = #{contactName},</if>
+            <if test="contactPhone != null">contact_phone = #{contactPhone},</if>
+            <if test="city != null">city = #{city},</if>
+            <if test="district != null">district = #{district},</if>
+            <if test="community != null">community = #{community},</if>
+            <if test="detail != null">detail = #{detail},</if>
+            <if test="longitude != null">longitude = #{longitude},</if>
+            <if test="latitude != null">latitude = #{latitude},</if>
+            <if test="entryMode != null">entry_mode = #{entryMode},</if>
+        </set>
+        where id = #{id} and user_id = #{userId} and deleted_at is null
+    </update>
+
+    <update id="deleteByUser">
+        update address set deleted_at = now()
+        where id = #{id} and user_id = #{userId} and deleted_at is null
+    </update>
+
+    <update id="clearDefaultByUser">
+        update address set is_default = 0
+        where user_id = #{userId} and deleted_at is null
+    </update>
+
+    <update id="markDefaultByUser">
+        update address set is_default = 1
+        where id = #{id} and user_id = #{userId} and deleted_at is null
+    </update>
+</mapper>

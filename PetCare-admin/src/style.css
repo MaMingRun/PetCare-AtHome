@@ -1,0 +1,40 @@
+:root { --brand:#ff7a45; --brand-dark:#d4380d; --bg:#f5f7fa; }
+* { margin:0; padding:0; box-sizing:border-box; }
+html, body, #app { height:100%; font-family:'Helvetica Neue', Helvetica, 'PingFang SC', 'Microsoft YaHei', sans-serif; background:var(--bg); color:#1f2937; }
+a { text-decoration:none; color:inherit; }
+
+/* 布局 */
+.app-shell { display:flex; height:100%; }
+.sidebar { width:220px; background:#001529; color:#fff; display:flex; flex-direction:column; }
+.sidebar .logo { height:60px; display:flex; align-items:center; gap:10px; padding:0 20px; border-bottom:1px solid #1f2a3d; font-size:16px; font-weight:600; }
+.sidebar .logo .dot { width:10px; height:10px; border-radius:50%; background:var(--brand); }
+.sidebar .el-menu { border-right:none; flex:1; }
+
+.main { flex:1; display:flex; flex-direction:column; min-width:0; }
+.topbar { height:60px; background:#fff; display:flex; align-items:center; justify-content:space-between; padding:0 24px; border-bottom:1px solid #eee; }
+.content { flex:1; padding:20px; overflow:auto; }
+
+/* 登录 */
+.login-wrap { height:100%; display:flex; align-items:center; justify-content:center; background:linear-gradient(135deg,#fff7ed,#ffedd5); }
+.login-card { width:380px; padding:36px 32px; background:#fff; border-radius:12px; box-shadow:0 8px 32px rgba(0,0,0,.08); }
+.login-card h2 { font-size:20px; margin-bottom:8px; }
+.login-card .sub { color:#999; font-size:13px; margin-bottom:24px; }
+
+/* Dashboard 卡片 */
+.stat-grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(200px,1fr)); gap:16px; margin-bottom:20px; }
+.stat-card { background:#fff; border-radius:10px; padding:20px; box-shadow:0 1px 3px rgba(0,0,0,.04); }
+.stat-card .label { color:#999; font-size:13px; margin-bottom:6px; }
+.stat-card .value { font-size:26px; font-weight:700; color:#1f2937; }
+.stat-card.accent-1 .value { color:#ff7a45; }
+.stat-card.accent-2 .value { color:#1677ff; }
+.stat-card.accent-3 .value { color:#52c41a; }
+.stat-card.accent-4 .value { color:#722ed1; }
+
+/* 表格容器 */
+.panel { background:#fff; border-radius:10px; padding:16px; box-shadow:0 1px 3px rgba(0,0,0,.04); }
+.panel-header { display:flex; justify-content:space-between; align-items:center; margin-bottom:12px; }
+.panel-header h3 { font-size:15px; font-weight:600; }
+
+/* 金额分→元 */
+.money { font-family:'SF Mono', Consolas, monospace; font-weight:600; }
+.money::before { content:'¥'; font-weight:400; margin-right:2px; }

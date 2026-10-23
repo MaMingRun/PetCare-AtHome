@@ -1,0 +1,26 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.mr.mapper.OrderDayMapper">
+
+    <insert id="insert" useGeneratedKeys="true" keyProperty="id">
+        insert into order_day (order_id, date, slot_begin, slot_end, status)
+        values (#{orderId}, #{date}, #{slotBegin}, #{slotEnd}, 'PENDING')
+    </insert>
+
+    <select id="getByOrderAndDate" resultType="com.mr.entity.OrderDay">
+        select * from order_day where order_id = #{orderId} and date = #{date}
+    </select>
+
+    <update id="markStatus">
+        update order_day set status = #{to} where id = #{id} and status = #{from}
+    </update>
+
+    <select id="countNotDone" resultType="int">
+        select count(*) from order_day where order_id = #{orderId} and status != 'DONE'
+    </select>
+
+    <select id="listByOrderId" resultType="com.mr.entity.OrderDay">
+        select * from order_day where order_id = #{orderId} order by date
+    </select>
+</mapper>

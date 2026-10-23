@@ -1,0 +1,33 @@
+# 开发环境配置（敏感值已脱敏，克隆后请按此处占位符填写本地实际值）
+# MySQL 用户名 root、密码请与本机一致；Redis 如无密码保持空串
+# 微信 AppSecret 仅存本地，切勿提交
+pet:
+  datasource:
+    driver-class-name: com.mysql.cj.jdbc.Driver
+    host: localhost
+    port: 3306
+    database: petcare
+    username: root
+    password: "********"
+  alioss:
+    endpoint: oss-cn-beijing.aliyuncs.com
+    access-key-id: "********************"
+    access-key-secret: "************************"
+    bucket-name: ********
+  redis:
+    host: localhost
+    port: 6379
+    password: "********"
+    database: 1
+  wechat:
+    appid: "wxb08a6521ad095aa4"
+    secret: "********************************"
+    mock: true
+    notifyUrl: https://your-callback.example.com
+  shop:
+    address: 请填写你店铺的真实地址
+  baidu:
+    ak: "***"
+  logging:
+    level:
+      com.mr.mapper: debug
